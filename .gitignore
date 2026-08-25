@@ -1,0 +1,25 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Manim / rendering output
+media/
+*.mp4
+*.mkv
+*.mov
+
+# Generated subtitles (regenerable from the scripts)
+*.srt
+
+# OS/editor
+.DS_Store

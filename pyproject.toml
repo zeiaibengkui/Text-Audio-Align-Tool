@@ -1,0 +1,23 @@
+[project]
+name = "learnai"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "funasr>=1.4.3",
+    "ipykernel>=7.3.0",
+    "numpy>=2.5.2",
+    "pandas>=3.0.5",
+    "qwen-aligner-toolkit>=0.1.4",
+    "torch>=2.13.0",
+    "torchaudio>=2.11.0",
+    "torchvision>=0.28.0",
+]
+
+[project.scripts]
+learnai = "learnai:main"
+
+[build-system]
+requires = ["uv_build>=0.12.5,<0.13.0"]
+build-backend = "uv_build"
