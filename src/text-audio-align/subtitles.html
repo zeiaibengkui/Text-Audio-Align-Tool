@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>经文 · 竖排卷轴</title>
+  <style>
+    :root {
+      --ink: #3a2f28;
+      --paper: #f6efdd;
+      --accent: #a33;
+      --line: rgba(58, 47, 40, .18);
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0; height: 100%; overflow: hidden;
+      background: var(--paper);
+      color: var(--ink);
+      font-family: "Noto Serif CJK SC", "Songti SC", "SimSun", serif;
+    }
+
+    .stage { position: fixed; inset: 0; overflow: hidden; }
+
+    /* 纸面纹理（淡淡网格/细微成像） */
+    .stage::before {
+      content: ""; position: absolute; inset: 0; pointer-events: none;
+      background:
+        radial-gradient(circle at 20% 10%, rgba(0,0,0,.02), transparent 40%),
+        radial-gradient(circle at 80% 90%, rgba(0,0,0,.02), transparent 40%);
+    }
+
+    .scroll {
+      position: absolute; top: 0; left: 0; height: 100%;
+      display: flex; align-items: center; gap: 30px;
+      padding: 0 80px;
+      will-change: transform; transition: transform .6s cubic-bezier(.3,.7,.3,1);
+    }
+
+    .line {
+      writing-mode: vertical-rl;
+      height: 86vh; max-height: 86vh;
+      font-size: clamp(30px, 4.6vw, 56px);
+      line-height: 1.14; letter-spacing: .04em;
+    }
+    .line .ch { opacity: 0; transition: opacity .1s linear; }
+    .line .ch.on { opacity: 1; }
+
+    .seal {
+      position: fixed; right: 34px; bottom: 40px;
+      writing-mode: vertical-rl; font-size: 26px; font-weight: 700;
+      color: var(--accent); opacity: .75; letter-spacing: .2em;
+      user-select: none;
+    }
+
+    .hud {
+      position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%);
+      display: flex; align-items: center; gap: 14px;
+      background: rgba(255,255,255,.55);
+      border: 1px solid var(--line); border-radius: 999px;
+      padding: 8px 16px; font-size: 14px; backdrop-filter: blur(5px);
+    }
+    .hud button {
+      border: 0; background: var(--ink); color: var(--paper);
+      border-radius: 999px; padding: 6px 14px; cursor: pointer; font-size: 14px;
+      font-family: inherit;
+    }
+    .hud input[type=range] {
+      width: 220px; accent-color: var(--ink); cursor: pointer;
+    }
+    .time { font-variant-numeric: tabular-nums; min-width: 108px; text-align: center; }
+    .hint {
+      position: fixed; left: 50%; top: 20px; transform: translateX(-50%);
+      font-size: 13px; color: rgba(58,47,40,.55); letter-spacing: .1em;
+    }
+    .error {
+      position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%);
+      font-size: 16px; color: var(--accent); text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="stage">
+    <div class="scroll" id="scroll"></div>
+  </div>
+  <div class="seal">印经</div>
+  <div class="hint">竖排 · 从右往左 · 随声书写</div>
+  <div class="hud">
+    <button id="play">播放</button>
+    <input id="seek" type="range" min="0" max="0" step="0.01" value="0">
+    <span class="time" id="time">0:00 / 0:00</span>
+  </div>
+  <audio id="audio" preload="auto"></audio>
+  <div class="error" id="error" hidden></div>
+
+  <script>
+    (async () => {
+      const $ = (s) => document.querySelector(s);
+      const stage = $(".stage"), scroll = $("#scroll"), audio = $("#audio");
+      const playBtn = $("#play"), seek = $("#seek"), timeEl = $("#time"), err = $("#error");
+
+      let cues = [], nextIdx = 0, raf = 0;
+
+      // 加载对齐数据
+      let data;
+      try {
+        const res = await fetch("align.json");
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        data = await res.json();
+      } catch (e) {
+        err.hidden = false;
+        err.textContent = "无法读取 align.json。" +
+          "请在目录下运行：python3 -m http.server 然后访问 http://localhost:8000/subtitles.html";
+        return;
+      }
+      cues = data.cues || [];
+      audio.src = data.audio || "data/audio.mp3";
+      if (data.duration) { seek.max = data.duration; }
+
+      const fmt = (s) => {
+        s = Math.max(0, s || 0);
+        const m = Math.floor(s / 60), sec = Math.floor(s % 60);
+        return `${m}:${String(sec).padStart(2, "0")}`;
+      };
+
+      function layout() {
+        const pad = 80;
+        const shift = scroll.scrollWidth - stage.clientWidth + pad;
+        scroll.style.transform = `translateX(${-Math.max(0, shift)}px)`;
+      }
+
+      function buildLine(text) {
+        const line = document.createElement("div");
+        line.className = "line";
+        for (const ch of text) {
+          const s = document.createElement("span");
+          s.className = "ch"; s.textContent = ch; line.appendChild(s);
+        }
+        return line;
+      }
+
+      function reveal(line, frac) {
+        const chs = line.querySelectorAll(".ch");
+        const n = Math.round(frac * chs.length);
+        for (let i = 0; i < chs.length; i++) chs[i].classList.toggle("on", i < n);
+      }
+
+      function activeIndex(now) {
+        let idx = -1;
+        for (let i = 0; i < cues.length; i++) {
+          if (cues[i].start <= now && now < cues[i].end) idx = i;
+        }
+        return idx;
+      }
+
+      // 重建到当前时刻（用于拖动进度）
+      function rebuild(now) {
+        scroll.innerHTML = ""; nextIdx = 0; layout();
+        while (nextIdx < cues.length && cues[nextIdx].start <= now) {
+          const c = cues[nextIdx];
+          const line = buildLine(c.text);
+          scroll.appendChild(line);
+          reveal(line, c.end <= now ? 1
+            : Math.min(1, Math.max(0, (now - c.start) / (c.end - c.start))));
+          nextIdx++;
+        }
+        layout();
+      }
+
+      function tick() {
+        const now = audio.currentTime;
+        // 追加已到时间的字幕行
+        while (nextIdx < cues.length && cues[nextIdx].start <= now) {
+          const c = cues[nextIdx];
+          scroll.appendChild(buildLine(c.text));
+          nextIdx++;
+        }
+        // 当前书写中的行按进度逐字浮现
+        const ai = activeIndex(now);
+        const lines = scroll.querySelectorAll(".line");
+        for (let i = 0; i < lines.length; i++) {
+          const ci = nextIdx - lines.length + i; // 该行对应的 cue 下标
+          const c = cues[ci];
+          if (c.end <= now) reveal(lines[i], 1);
+        }
+        if (ai >= 0 && ai < lines.length) {
+          const c = cues[ai];
+          reveal(lines[ai], (now - c.start) / (c.end - c.start));
+        }
+        layout();
+
+        if (!seek.matches(":active") && !audio.paused) seek.value = now;
+        timeEl.textContent = `${fmt(now)} / ${fmt(audio.duration || data.duration || 0)}`;
+        raf = requestAnimationFrame(tick);
+      }
+
+      playBtn.addEventListener("click", () => {
+        if (audio.paused) { audio.play(); playBtn.textContent = "暂停"; }
+        else { audio.pause(); playBtn.textContent = "播放"; }
+      });
+      audio.addEventListener("play", () => playBtn.textContent = "暂停");
+      audio.addEventListener("pause", () => playBtn.textContent = "播放");
+
+      seek.addEventListener("input", () => {
+        audio.currentTime = parseFloat(seek.value);
+      });
+      audio.addEventListener("seeked", () => rebuild(audio.currentTime));
+
+      audio.addEventListener("loadedmetadata", () => {
+        seek.max = audio.duration || data.duration || 0;
+      });
+
+      rebuild(0);
+      tick();
+    })();
+  </script>
+</body>
+</html>

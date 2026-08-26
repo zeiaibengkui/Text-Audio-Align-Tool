@@ -16,8 +16,9 @@ from manim import *
 
 TEXT_FILE = "./data/text.txt"
 AUDIO_FILE = "data/audio.mp3"
-ICON_FILE = "data/icon.webp"
-FONT = "Noto Sans CJK SC"
+FONT = "Noto Serif CJK SC"
+PAPER = "#f6efdd"
+INK = "#3a2f28"
 
 
 def clean_positions(text, words):
@@ -46,8 +47,8 @@ def clean_positions(text, words):
     return spans
 
 
-def build_cues(words, text, max_chars=17, min_chars=8):
-    """把对齐词按“词边界 + 原文标点”组合成字幕行：保留标点、不拆词。"""
+def build_cues(words, text, max_chars=20, sentence_min=12):
+    """按原文段落切分字幕：段落换行、成句合并，长句才在分词处折行。"""
     sentence_end = "。！？!?"
     clause_end = "，、；：,;:"
     spans = clean_positions(text, words)
@@ -59,11 +60,15 @@ def build_cues(words, text, max_chars=17, min_chars=8):
         nxt = spans[idx + 1][0] if idx + 1 < len(spans) else len(text)
         between = text[o_end:nxt]
         cur_len = nxt - cur[0][0]
-        close = (
-            any(c in sentence_end for c in between)
-            or (any(c in clause_end for c in between) and cur_len >= min_chars)
-            or cur_len >= max_chars
-        )
+        close = False
+        if "\n" in between:            # 原文段落换行
+            close = True
+        elif any(c in sentence_end for c in between):
+            close = cur_len >= sentence_min   # 成句才断开，短句并入下句
+        elif any(c in clause_end for c in between) and cur_len >= max_chars:
+            close = True               # 长句在标点处折行
+        elif cur_len >= max_chars:
+            close = True               # 过长则按词折行
         if close:
             display = "".join(text[cur[0][0]:nxt].split())
             cues.append((display, min(c[2] for c in cur), max(c[3] for c in cur)))
@@ -71,7 +76,26 @@ def build_cues(words, text, max_chars=17, min_chars=8):
     if cur:
         display = "".join(text[cur[0][0]:].split())
         cues.append((display, min(c[2] for c in cur), max(c[3] for c in cur)))
-    return cues
+    return _merge_unbalanced(cues)
+
+
+def _merge_unbalanced(cues):
+    """把以未闭合括号收尾的字幕与下一行合并，避免把【原文】这类拆开。"""
+    res = []
+    for d, s, e in cues:
+        if res and res[-1][0].endswith(("【", "（", "《", "「")):
+            pd, ps, pe = res[-1]
+            res[-1] = (pd + d, ps, e)
+        else:
+            res.append((d, s, e))
+    out = []
+    for d, s, e in res:
+        if out and d and d[0] in ("】", "）", "》", "」"):
+            pd, ps, pe = out[-1]
+            out[-1] = (pd + d, ps, e)
+        else:
+            out.append((d, s, e))
+    return out
 
 
 def split_text_by_weight(text, k):
@@ -155,15 +179,20 @@ def write_srt(cues, path="subtitles.srt"):
             f.write(f"{i}\n{ts(start)} --> {ts(end)}\n{text}\n\n")
 
 
-def load_cues():
-    """运行对齐并返回字幕行 [(display, start, end)]。时间戳来自模型输出。"""
+def load_data():
+    """运行对齐，返回 (text, words, cues, duration)。时间戳来自模型输出。"""
     aligner = Aligner.from_pretrained()
     with open(TEXT_FILE, encoding="utf-8") as f:
         text = f.read()
     dur = audio_duration(AUDIO_FILE)
     words = align_chunked(aligner, text, AUDIO_FILE, dur)
     words = smooth_words(words, dur)
-    return build_cues(words, text)
+    return text, words, build_cues(words, text), dur
+
+
+def load_cues():
+    """运行对齐并返回字幕行 [(display, start, end)]。"""
+    return load_data()[2]
 
 
 def audio_duration(path):
@@ -174,6 +203,28 @@ def audio_duration(path):
     return float(out.strip())
 
 
+def make_vertical_text(line_text, chars_per_col=9, font_size=42, buff=0.12):
+    """把一行字幕排成竖排（每列从上到下、列序从右到左），返回逐字平铺的组。"""
+    tokens = list(line_text)
+    cols = []
+    for i in range(0, len(tokens), chars_per_col):
+        chunk = tokens[i:i + chars_per_col]
+        col = VGroup(
+            *[Text(ch, font=FONT, font_size=font_size, color=INK)
+              for ch in chunk]
+        ).arrange(DOWN, buff=buff)
+        cols.append(col)
+    cols = cols[::-1]  # 第一列放在最右侧（竖排从右往左读）
+    total_w = sum(c.width for c in cols) + 0.5 * (len(cols) - 1)
+    chars = []
+    x = total_w / 2
+    for col in cols:
+        col.move_to([x, 0, 0])
+        x -= col.width + 0.5
+        chars.extend(col)  # 列内已从上到下排好
+    return VGroup(*chars)
+
+
 class SubtitleVideo(Scene):
     def construct(self):
         cues = load_cues()
@@ -181,35 +232,51 @@ class SubtitleVideo(Scene):
         dur = audio_duration(AUDIO_FILE)
         self.add_sound(AUDIO_FILE)
 
-        # 背景：黑场 + 居中图标
-        icon = ImageMobject(ICON_FILE)
-        icon.scale_to_fit_height(config.frame_height * 0.8)
-        icon.move_to(ORIGIN)
-        self.add(icon)
+        # 纸面背景
+        paper = Rectangle(
+            width=config.frame_width, height=config.frame_height,
+            fill_color=PAPER, fill_opacity=1.0, stroke_width=0,
+        )
+        paper.set_z_index(-10)
+        self.add(paper)
 
+        # 长卷：已被写下的文字都放在 holder 里，随写作整体向左滚动
+        holder = VGroup()
+        self.add(holder)
+        write_x = config.frame_width / 2 - 1.6  # 当前书写位（屏幕右侧）
+        col_gap = 0.6
         elapsed = 0.0
+
         for line_text, start, end in cues:
+            seg_dur = end - start
+            if seg_dur <= 0.0:
+                continue
             if start > elapsed:
                 self.wait(start - elapsed)
                 elapsed = start
 
-            line = Text(line_text, font=FONT, font_size=42,
-                        color=WHITE, weight=BOLD)
-            line.to_edge(DOWN, buff=0.5)
+            block = make_vertical_text(line_text)
+            block.move_to([write_x, 0, 0])
+            holder.add(block)
 
-            seg_dur = end - start
-            if seg_dur <= 0.0:
-                continue
-            show = min(0.3, max(0.05, seg_dur))
-            self.play(FadeIn(line, run_time=show))
-            remain = seg_dur - show
-            if remain > 0.0:
-                self.wait(remain)
-            elapsed = end
-            self.remove(line)
+            write_time = min(seg_dur, max(0.5, seg_dur * 0.55))
+            advance = block.width + col_gap
+            # 逐字浮现，同时整卷从右向左滚动
+            self.play(
+                FadeIn(block, lag_ratio=0.5, run_time=write_time),
+                holder.animate.shift(LEFT * advance),
+                run_time=write_time,
+            )
+            elapsed += write_time
+
+            hold = seg_dur - write_time
+            if hold > 0.0:
+                self.wait(hold)
+                elapsed += hold
 
         # 补足到音频结束，避免结尾被截掉
-        self.wait(max(0.0, dur - elapsed))
+        if dur - elapsed > 0:
+            self.wait(dur - elapsed)
 
 
 if __name__ == "__main__":
