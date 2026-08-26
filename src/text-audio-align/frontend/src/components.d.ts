@@ -13,6 +13,7 @@ export {}
 declare module 'vue' {
   export interface GlobalComponents {
     BButton: typeof import('bootstrap-vue-next/components/BButton')['BButton']
+    BButtonGroup: typeof import('bootstrap-vue-next/components/BButton')['BButtonGroup']
     BFormInput: typeof import('bootstrap-vue-next/components/BFormInput')['BFormInput']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
@@ -22,6 +23,7 @@ declare module 'vue' {
 // For TSX support
 declare global {
   const BButton: typeof import('bootstrap-vue-next/components/BButton')['BButton']
+  const BButtonGroup: typeof import('bootstrap-vue-next/components/BButton')['BButtonGroup']
   const BFormInput: typeof import('bootstrap-vue-next/components/BFormInput')['BFormInput']
   const RouterLink: typeof import('vue-router')['RouterLink']
   const RouterView: typeof import('vue-router')['RouterView']

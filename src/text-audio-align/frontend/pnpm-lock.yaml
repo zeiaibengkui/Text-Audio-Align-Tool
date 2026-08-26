@@ -17,6 +17,9 @@ importers:
       bootstrap-vue-next:
         specifier: ^1.0.1
         version: 1.0.1(@vueuse/core@14.4.0(vue@3.5.41(typescript@6.0.3)))(bootstrap@5.3.8(@popperjs/core@2.11.8))(vue-router@5.2.0(@vue/compiler-sfc@3.5.41)(pinia@4.0.3(@vue/devtools-api@8.2.1)(typescript@6.0.3)(vue@3.5.41(typescript@6.0.3)))(rolldown@1.2.5)(vite@8.2.2(@types/node@24.13.3)(jiti@2.7.0)(yaml@2.9.0))(vue@3.5.41(typescript@6.0.3)))(vue@3.5.41(typescript@6.0.3))
+      chiron-hei-hk-webfont:
+        specifier: ^2.6.9
+        version: 2.6.9
       pinia:
         specifier: ^4.0.2
         version: 4.0.3(@vue/devtools-api@8.2.1)(typescript@6.0.3)(vue@3.5.41(typescript@6.0.3))
@@ -1218,6 +1221,9 @@ packages:
   chai@6.2.2:
     resolution: {integrity: sha512-NUPRluOfOiTKBKvWPtSD4PhFvWCqOi0BGStNWs57X9js7XGTprSmFoz5F0tWhR4WPjNeR9jXqdC7/UpSJTnlRg==}
     engines: {node: '>=18'}
+
+  chiron-hei-hk-webfont@2.6.9:
+    resolution: {integrity: sha512-CefAKr1PavJnhWxBohCtru1Bb/FjQPDx75J0EckJvrkOmiXFL6+1v7HoOaJvX/NnmhJCLUnGBXiHm153+LtypA==}
 
   chokidar@5.0.0:
     resolution: {integrity: sha512-TQMmc3w+5AxjpL8iIiwebF73dRDF4fBIieAqGn9RGCWaEVwQ6Fb2cGe31Yns0RRIzii5goJ1Y7xbMwo1TxMplw==}
@@ -3458,6 +3464,8 @@ snapshots:
   caniuse-lite@1.0.30001810: {}
 
   chai@6.2.2: {}
+
+  chiron-hei-hk-webfont@2.6.9: {}
 
   chokidar@5.0.0:
     dependencies:
