@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, nextTick, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 
 interface Cue {
     text: string
@@ -12,15 +12,20 @@ const reel = ref<HTMLElement | null>(null)
 const cues = ref<Cue[]>([])
 const now = ref(0)
 const duration = ref(0)
-const widths = ref<number[]>([])
-const gap = 16
-const writeX = ref(140)
 const playing = ref(false)
 const error = ref('')
 
-// 竹简从右往左读：最早的在右、最新的在左
-const display = computed(() => cues.value.slice().reverse())
+const ui = {
+    newOnLeft: true,
+    fontScale: 1,
+    revealRate: 1,
+    gap: 16,
+}
+
 const audio = () => document.getElementById('audio') as HTMLAudioElement
+
+// 依据方向确定简片顺序：新字在左 => 最早的在右（从右往左读）
+const display = computed(() => (ui.newOnLeft ? cues.value.slice().reverse() : cues.value.slice()))
 
 const activeK = computed(() => {
     let k = -1
@@ -31,19 +36,16 @@ const activeK = computed(() => {
     return k
 })
 
-// 新文字出现在左侧：把当前书写的那枚竹简锚定在屏幕左边
 const activeDisp = computed(() => {
     const k = activeK.value
-    return k < 0 ? -1 : cues.value.length - 1 - k
+    if (k < 0) return -1
+    return ui.newOnLeft ? cues.value.length - 1 - k : k
 })
 
-const offset = computed(() => {
-    const d = activeDisp.value
-    if (d < 0 || !widths.value.length) return stage.value?.clientWidth || 0
-    let pos = 0
-    for (let i = 0; i < d; i++) pos += (widths.value[i] ?? 0) + gap
-    return writeX.value - pos
-})
+const stageVars = computed(() => ({
+    '--font-scale': String(ui.fontScale),
+    '--gap': ui.gap + 'px',
+}))
 
 function revealFrac(d: number): number {
     const c = display.value[d]
@@ -57,7 +59,8 @@ function chars(c: Cue): string[] {
 }
 
 function revealedCount(d: number, len: number): number {
-    return Math.round(revealFrac(d) * len)
+    const f = Math.min(1, revealFrac(d) * ui.revealRate)
+    return Math.round(f * len)
 }
 
 function fmt(s: number): string {
@@ -67,13 +70,20 @@ function fmt(s: number): string {
     return `${m}:${String(sec).padStart(2, '0')}`
 }
 
-function measure() {
-    const lines = reel.value ? reel.value.querySelectorAll('.slip') : []
-    const ws: number[] = []
-    lines.forEach((l) => ws.push((l as HTMLElement).getBoundingClientRect().width))
-    widths.value = ws
-    writeX.value = Math.min(190, (stage.value?.clientWidth || 1200) * 0.16 + 60)
+// 用原生 scrollIntoView 把当前书写的那枚竹简滚动到目标侧
+function scrollActive() {
+    const d = activeDisp.value
+    if (d < 0) return
+    const els = reel.value?.querySelectorAll('.slip')
+    const el = els && (els[d] as HTMLElement)
+    el?.scrollIntoView({
+        behavior: 'auto',
+        block: 'center',
+        inline: 'center',
+    })
 }
+
+watch(activeDisp, () => scrollActive())
 
 let raf = 0
 let destroyed = false
@@ -94,8 +104,7 @@ async function load() {
         const a = audio()
         a.src = '/' + String(data.audio || 'data/audio.mp3')
         await nextTick()
-        measure()
-        document?.fonts?.ready?.then(() => measure()).catch(() => {})
+        scrollActive()
         raf = requestAnimationFrame(loop)
     } catch {
         error.value = '无法读取 /align.json。请先运行 python export_align.py 生成数据。'
@@ -126,8 +135,8 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-    <div class="stage" ref="stage">
-        <div class="reel" ref="reel" :style="{ transform: 'translateX(' + offset + 'px)' }">
+    <div class="stage" ref="stage" :style="stageVars">
+        <div class="reel" ref="reel">
             <div class="slip" v-for="(c, i) in display" :key="i">
                 <span
                     v-for="(ch, j) in chars(c)"
@@ -140,10 +149,10 @@ onBeforeUnmount(() => {
         </div>
 
         <div class="seal">印经</div>
-        <h1 class="hint">善润滑年</h1>
+        <h1 class="hint">善润华年</h1>
 
-        <div class="hud shadow-sm">
-            <b-button size="sm" variant="outline-dark" class="w-25" @click="toggle">
+        <div class="hud">
+            <b-button size="sm" class="w-25" variant="outline-dark" @click="toggle">
                 {{ playing ? '暂停' : '播放' }}
             </b-button>
             <b-form-input
@@ -173,7 +182,9 @@ body {
     height: 100%;
     overflow: hidden;
     background: #d8c9a8;
-    font-family: 'fangsong', 'Noto Serif CJK SC', 'Songti SC', 'SimSun', serif;
+    font-family:
+        /* 'Chiron Hei HK WS', 'Noto Sans CJK SC', 'PingFang SC', 'fangsong', 'KaiTi', */
+        'Noto Serif CJK SC', 'Songti SC', 'SimSun', sans-serif;
 }
 .stage {
     position: fixed;
@@ -181,7 +192,6 @@ body {
     overflow: hidden;
     background: #d8c9a8 url('/bg.jpg') center / cover no-repeat;
 }
-/* 轻微提亮，保证文字在画面上可读 */
 .stage::before {
     content: '';
     position: absolute;
@@ -191,25 +201,24 @@ body {
 }
 .reel {
     position: absolute;
-    top: 0;
-    left: 0;
+    inset: 0;
     height: 100%;
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: var(--gap, 16px);
     padding: 0 70px;
-    will-change: transform;
-    transition: transform 3s ease-in-out;
+    overflow-x: hidden;
+    overflow-y: hidden;
+    scroll-behavior: smooth;
 }
 .slip {
     writing-mode: vertical-rl;
     height: 82vh;
     max-height: 82vh;
-    background: rgba(246, 240, 224, 0.2);
-    border-radius: 6px;
-    box-shadow: inset 0 0 0 1px rgba(70, 45, 20, 0.25);
-    padding: 22px 15px;
-    font-size: clamp(28px, 4.1vw, 50px);
+    flex: 0 0 auto;
+    border-right: 1px solid rgba(70, 45, 20, 0.35);
+    padding: 22px 14px 22px 16px;
+    font-size: calc(clamp(28px, 4.1vw, 50px) * var(--font-scale, 1));
     line-height: 1.16;
     letter-spacing: 0.04em;
     color: var(--ink);
@@ -217,7 +226,7 @@ body {
 }
 .slip .ch {
     opacity: 0;
-    transition: opacity 2s linear;
+    transition: opacity 3s linear;
 }
 .slip .ch.on {
     opacity: 1;
@@ -239,7 +248,7 @@ body {
     left: 50%;
     top: 18px;
     transform: translateX(-50%);
-    font-size: 13px;
+    /* font-size: 13px; */
     color: rgba(90, 60, 30, 0.75);
     letter-spacing: 0.1em;
 }
