@@ -100,7 +100,9 @@ cd src/text-audio-align
 ../../.venv/bin/python export_align.py
 ```
 
-Alignment loads the model and takes minutes; it is not a fast edit-test loop.
+Alignment runs on the Intel Arc GPU with `ALIGN_DEVICE=xpu` (~35s end-to-end including
+model load, verified) or on CPU by default, which takes minutes. Either way it's slow
+enough that `ALIGN_FAKE=1` on the server is the fast edit-test loop.
 
 ### Frontend
 

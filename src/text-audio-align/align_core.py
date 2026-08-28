@@ -9,6 +9,7 @@
 """
 
 import math
+import os
 import subprocess
 import threading
 from pathlib import Path
@@ -38,12 +39,14 @@ def get_aligner(device=None):
     """惰性加载并复用对齐器。模型加载是一次性的主要开销，务必只做一次。
 
     device 留空时由 toolkit 自行决定（当前机器无 CUDA，会落到 CPU）；
-    传 "xpu" 可试用 Intel GPU，但 toolkit 对此路径未经验证。
+    也可用环境变量 ALIGN_DEVICE 指定（server.py 同款），不传参直接跑
+    export_align.py 时两者效果一样。传 "xpu" 可试用 Intel GPU。
     """
     global _aligner
     if _aligner is None:
         with _aligner_lock:
             if _aligner is None:
+                device = device if device is not None else os.environ.get("ALIGN_DEVICE")
                 kwargs = {"device_map": device} if device else {}
                 _aligner = Aligner.from_pretrained(**kwargs)
     return _aligner
