@@ -24,6 +24,11 @@ True and `torch.cuda.is_available()` is **False**. Select the device as the note
 device = torch.device("xpu" if torch.xpu.is_available() else "cpu")
 ```
 
+`align_core.py` loads a `.env` from the repo root at import (simple `KEY=VALUE` parse,
+no python-dotenv; existing env vars win). It's gitignored — the local `.env` sets
+`ALIGN_DEVICE=xpu` (verified on the Arc GPU). Force-add it if the default should travel
+with the repo.
+
 `ffprobe` (from ffmpeg) must be on `PATH` — the pipeline shells out to it for audio duration.
 
 ### Do not run `uv sync` or `uv run`

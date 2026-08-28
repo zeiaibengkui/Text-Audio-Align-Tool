@@ -25,6 +25,38 @@ AUDIO_FILE = "data/audio.mp3"
 
 _BASE = Path(__file__).resolve().parent
 
+_dotenv_loaded = False
+
+
+def _load_dotenv():
+    """加载仓库根目录的 .env，为未定义的环境变量提供默认值。
+
+    不引 python-dotenv，直接解析 KEY=VALUE：支持空行、# 注释和引号；
+    已存在的环境变量优先（进程外显式传的 ALIGN_DEVICE 不被覆盖）。
+    在 import 时调用，server.py 在请求期读 os.environ 时已生效。
+    """
+    global _dotenv_loaded
+    if _dotenv_loaded:
+        return
+    _dotenv_loaded = True
+    env_file = _BASE.parents[1] / ".env"
+    try:
+        with open(env_file, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, _, value = line.partition("=")
+                key = key.strip()
+                value = value.strip().strip("\"'").strip()
+                if key and key not in os.environ:
+                    os.environ[key] = value
+    except OSError:
+        pass  # 没装 .env 就跳过
+
+
+_load_dotenv()
+
 _aligner = None
 _aligner_lock = threading.Lock()
 
@@ -39,8 +71,8 @@ def get_aligner(device=None):
     """惰性加载并复用对齐器。模型加载是一次性的主要开销，务必只做一次。
 
     device 留空时由 toolkit 自行决定（当前机器无 CUDA，会落到 CPU）；
-    也可用环境变量 ALIGN_DEVICE 指定（server.py 同款），不传参直接跑
-    export_align.py 时两者效果一样。传 "xpu" 可试用 Intel GPU。
+    也可用 ALIGN_DEVICE 环境变量指定——仓库根目录的 .env 会在 import 时
+    加载，所以 export_align.py / server.py 都能同样生效（见 _load_dotenv）。
     """
     global _aligner
     if _aligner is None:

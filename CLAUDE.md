@@ -26,7 +26,7 @@ Frontend (`src/text-audio-align/frontend/`): `npm run dev` / `npm run build` / `
 ## Environment
 
 - PyTorch is the **Intel XPU** build: `torch.cuda.is_available()` is False, `torch.xpu.is_available()` is True. Select device as `torch.device("xpu" if torch.xpu.is_available() else "cpu")`.
-- `ALIGN_DEVICE=xpu` is **verified** on this machine (Intel Arc, ~3.7 GB resident). `align_core.get_aligner()` honors it; without it the toolkit resolves to CPU. `ALIGN_FAKE=1` is the fastest path, then `ALIGN_DEVICE=xpu` (~35s end-to-end incl. load), then CPU (minutes).
+- `ALIGN_DEVICE=xpu` is **verified** on this machine (Intel Arc, ~3.7 GB resident). A root `.env` is loaded automatically at `align_core` import (deps-free KEY=VALUE parser; explicitly set env vars win) — the local `.env` holds `ALIGN_DEVICE=xpu` as the default. Without it the toolkit resolves to CPU. `ALIGN_FAKE=1` is the fastest path, then XPU (~35s end-to-end incl. load), then CPU (minutes).
 - `ffprobe` (ffmpeg) must be on PATH — `align_core.audio_duration()` shells out to it.
 - `jobs/` (server artifacts) and `*.srt` are gitignored.
 
