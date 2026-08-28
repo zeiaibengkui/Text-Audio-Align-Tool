@@ -12,14 +12,13 @@ wheels/
 # Jupyter
 .ipynb_checkpoints/
 
-# Manim / rendering output
-media/
-*.mp4
-*.mkv
-*.mov
-
 # Generated subtitles (regenerable from the scripts)
 *.srt
 
 # OS/editor
 .DS_Store
+
+# Downloaded training data for the notebook (MNIST, ~64MB)
+# NB: "data/*" would only match a top-level /data — patterns with an interior
+# slash are anchored to this file's directory.
+/src/data/

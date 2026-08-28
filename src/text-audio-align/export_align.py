@@ -2,7 +2,7 @@
 
 import json
 
-from manim_video import load_data, AUDIO_FILE
+from align_core import load_data, AUDIO_FILE
 
 
 def main():

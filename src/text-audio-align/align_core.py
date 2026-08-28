@@ -1,24 +1,20 @@
-"""用 Manim 直接渲染对齐器输出的带字幕视频。
+"""文本—音频强制对齐核心：把原文和音频对齐成带时间戳的词与字幕行。
 
-直接使用 qwen_aligner_toolkit 对齐得到的每个词时间戳（模型输出），
-不经过中间 SRT 文件；以 data/icon.webp 为背景、data/audio.mp3 为音轨，
-字幕按时间戳逐条出现。
+使用 qwen_aligner_toolkit 得到每个词的时间戳（模型输出），再映射回原文
+以恢复标点，最后切分成字幕行。下游由 export_align.py 导出 align.json 供
+前端使用。
 
-运行：
-    manim render -qm manim_video.py SubtitleVideo
+运行（只生成 SRT）：
+    python align_core.py
 """
 
 import math
 import subprocess
 
 from qwen_aligner_toolkit import Aligner
-from manim import *
 
 TEXT_FILE = "./data/text.txt"
 AUDIO_FILE = "data/audio.mp3"
-FONT = "Noto Serif CJK SC"
-PAPER = "#f6efdd"
-INK = "#3a2f28"
 
 
 def clean_positions(text, words):
@@ -201,82 +197,6 @@ def audio_duration(path):
          "-of", "default=noprint_wrappers=1:nokey=1", path]
     )
     return float(out.strip())
-
-
-def make_vertical_text(line_text, chars_per_col=9, font_size=42, buff=0.12):
-    """把一行字幕排成竖排（每列从上到下、列序从右到左），返回逐字平铺的组。"""
-    tokens = list(line_text)
-    cols = []
-    for i in range(0, len(tokens), chars_per_col):
-        chunk = tokens[i:i + chars_per_col]
-        col = VGroup(
-            *[Text(ch, font=FONT, font_size=font_size, color=INK)
-              for ch in chunk]
-        ).arrange(DOWN, buff=buff)
-        cols.append(col)
-    cols = cols[::-1]  # 第一列放在最右侧（竖排从右往左读）
-    total_w = sum(c.width for c in cols) + 0.5 * (len(cols) - 1)
-    chars = []
-    x = total_w / 2
-    for col in cols:
-        col.move_to([x, 0, 0])
-        x -= col.width + 0.5
-        chars.extend(col)  # 列内已从上到下排好
-    return VGroup(*chars)
-
-
-class SubtitleVideo(Scene):
-    def construct(self):
-        cues = load_cues()
-        write_srt(cues)
-        dur = audio_duration(AUDIO_FILE)
-        self.add_sound(AUDIO_FILE)
-
-        # 纸面背景
-        paper = Rectangle(
-            width=config.frame_width, height=config.frame_height,
-            fill_color=PAPER, fill_opacity=1.0, stroke_width=0,
-        )
-        paper.set_z_index(-10)
-        self.add(paper)
-
-        # 长卷：已被写下的文字都放在 holder 里，随写作整体向左滚动
-        holder = VGroup()
-        self.add(holder)
-        write_x = config.frame_width / 2 - 1.6  # 当前书写位（屏幕右侧）
-        col_gap = 0.6
-        elapsed = 0.0
-
-        for line_text, start, end in cues:
-            seg_dur = end - start
-            if seg_dur <= 0.0:
-                continue
-            if start > elapsed:
-                self.wait(start - elapsed)
-                elapsed = start
-
-            block = make_vertical_text(line_text)
-            block.move_to([write_x, 0, 0])
-            holder.add(block)
-
-            write_time = min(seg_dur, max(0.5, seg_dur * 0.55))
-            advance = block.width + col_gap
-            # 逐字浮现，同时整卷从右向左滚动
-            self.play(
-                FadeIn(block, lag_ratio=0.5, run_time=write_time),
-                holder.animate.shift(LEFT * advance),
-                run_time=write_time,
-            )
-            elapsed += write_time
-
-            hold = seg_dur - write_time
-            if hold > 0.0:
-                self.wait(hold)
-                elapsed += hold
-
-        # 补足到音频结束，避免结尾被截掉
-        if dur - elapsed > 0:
-            self.wait(dur - elapsed)
 
 
 if __name__ == "__main__":
