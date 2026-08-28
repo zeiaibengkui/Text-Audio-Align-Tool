@@ -265,7 +265,7 @@
   transition: width 0.4s ease;
 }
 
-.job-delete {
+.job-action {
   flex: none;
   align-self: center;
   border: none;
@@ -275,9 +275,11 @@
   cursor: pointer;
   padding: 2px 6px;
   border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
 }
 
-.job-delete:hover {
+.job-action:hover {
   color: var(--seal-deep);
   background: var(--seal-bg);
 }

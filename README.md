@@ -119,7 +119,9 @@ sweeping down the lines during playback, and click-to-seek on any cue. A 字幕�
 toggle switches to the scroll rendering: vertical text columns reading right→left, each
 character fading in (alpha, scale, ink gradient) at its aligned timestamp, punctuation
 drawn in its vertical presentation form (`。`→`︒`, `，`→`︐`, …), the scroll panning in
-sync with the audio. In dev, Vite proxies `/api` to `127.0.0.1:5000`
+sync with the audio, and an optional user-uploaded cover image (added via the 封面 field
+in the form) mounted full-height at the paper's right end — the story-start side. In
+dev, Vite proxies `/api` to `127.0.0.1:5000`
 (`server.proxy` in `vite.config.ts` — change the target if the server runs elsewhere).
 It does not read the static `align.json`; each job's own `result.json` is what the UI
 renders.
@@ -145,7 +147,7 @@ original audio back in:
 
 ```sh
 pnpm export:scroll -- --json ../align.json --audio ../data/audio.mp3 --out scroll.mp4
-#   [--fps 25] [--size 1280x720] [--rows 12] [--dur 12] [--no-audio]
+#   [--fps 25] [--size 1280x720] [--rows 12] [--dur 12] [--no-audio] [--cover cover.jpg]
 ```
 
 `--dur` clips both the timeline and the timestamps, for short preview renders. The

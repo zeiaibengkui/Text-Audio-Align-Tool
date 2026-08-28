@@ -5,7 +5,9 @@ import {
   getHealth,
   getResult,
   jobAudioUrl,
+  jobCoverUrl,
   listJobs,
+  retryJob,
 } from './api'
 import { ScrollPlayer } from './ScrollPlayer'
 import type { Health, JobMeta, JobResult } from './types'
@@ -42,6 +44,7 @@ function App() {
     data: JobResult | null
   } | null>(null)
   const [audioFile, setAudioFile] = useState<File | null>(null)
+  const [coverFile, setCoverFile] = useState<File | null>(null)
   const [text, setText] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState('')
@@ -154,9 +157,10 @@ function App() {
     setSubmitting(true)
     setFormError('')
     try {
-      const job = await createJob(audioFile, text.trim())
+      const job = await createJob(audioFile, text.trim(), coverFile)
       selectJob(job.id)
       setAudioFile(null)
+      setCoverFile(null)
       setText('')
     } catch (err) {
       setFormError(err instanceof Error ? err.message : '提交失败')
@@ -168,6 +172,16 @@ function App() {
   const onDelete = async (id: string) => {
     await deleteJob(id)
     if (selectedId === id) selectJob(null)
+  }
+
+  const onRetry = async (id: string) => {
+    setFormError('')
+    try {
+      await retryJob(id)
+      selectJob(id)
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : '重试失败')
+    }
   }
 
   const pct =
@@ -221,6 +235,15 @@ function App() {
                 onChange={(e) => setText(e.target.value)}
               />
             </label>
+            <label className="field">
+              <span className="field-label">封面（可选）</span>
+              <input
+                type="file"
+                accept="image/*,.jpg,.jpeg,.png,.webp"
+                onChange={(e) => setCoverFile(e.target.files?.[0] ?? null)}
+              />
+              {coverFile && <span className="file-hint">{coverFile.name}</span>}
+            </label>
             <button className="btn" type="submit" disabled={submitting}>
               {submitting ? '正在提交…' : '开始对齐'}
             </button>
@@ -270,8 +293,34 @@ function App() {
                         </span>
                       )}
                     </div>
+                    {job.status === 'failed' && (
+                      <button
+                        className="job-action job-retry"
+                        title="重新对齐"
+                        aria-label="重新对齐"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          void onRetry(job.id)
+                        }}
+                      >
+                        <svg
+                          viewBox="0 0 24 24"
+                          width="14"
+                          height="14"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          aria-hidden="true"
+                        >
+                          <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+                          <path d="M21 3v6h-6" />
+                        </svg>
+                      </button>
+                    )}
                     <button
-                      className="job-delete"
+                      className="job-action"
                       title="删除任务"
                       aria-label="删除任务"
                       onClick={(e) => {
@@ -342,6 +391,9 @@ function App() {
                     result={result}
                     audioUrl={jobAudioUrl(selected.id)}
                     jobId={selected.id}
+                    coverUrl={
+                      selected.cover_ext ? jobCoverUrl(selected.id) : null
+                    }
                   />
                 ) : (
                   <>

@@ -7,12 +7,13 @@
  *   node scripts/export-scroll.mjs --json <result.json|align.json> \
  *       --audio <audio|http://...> --out scroll.mp4 \
  *       [--fps 25] [--size 1280x720] [--rows 12] [--dur 12] [--no-audio]
+ *       [--cover cover.jpg]
  *
  * 依赖：@napi-rs/canvas（pnpm add -D @napi-rs/canvas）、ffmpeg 在 PATH。
  */
 
 import { execFileSync, spawn } from 'node:child_process'
-import { createCanvas, GlobalFonts } from '@napi-rs/canvas'
+import { createCanvas, GlobalFonts, loadImage } from '@napi-rs/canvas'
 import { readFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
@@ -34,6 +35,7 @@ const [width, height] = String(arg('size', '1280x720'))
   .map((n) => Number(n))
 const rows = Number(arg('rows', 12))
 const durOverride = Number(arg('dur', 0))
+const coverPath = arg('cover')
 let noAudio = args.includes('--no-audio')
 
 if (!jsonPath) {
@@ -76,12 +78,28 @@ if (!noAudio && !audioPath) {
   noAudio = true
 }
 
+// ---------- 封面（可选，与浏览器同一 CoverSource 接口） ----------
+let cover = null
+if (coverPath) {
+  const img = await loadImage(coverPath)
+  if (img && img.width > 0 && img.height > 0) {
+    cover = {
+      width: img.width,
+      height: img.height,
+      draw: (ctx, x, y, w, h) => ctx.drawImage(img, x, y, w, h),
+    }
+  } else {
+    console.error(`封面加载失败：${coverPath}`)
+  }
+}
+
 // ---------- 渲染器 ----------
 const canvas = createCanvas(width, height)
 const ctx = canvas.getContext('2d')
 const renderer = new ScrollRenderer(width, height, 1, data, {
   rows,
   font: fontName,
+  cover,
 })
 const frames = Math.round(duration * fps)
 

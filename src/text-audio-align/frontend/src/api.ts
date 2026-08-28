@@ -25,10 +25,15 @@ export function getHealth(): Promise<Health> {
   return request('/health')
 }
 
-export function createJob(audio: File, text: string): Promise<JobMeta> {
+export function createJob(
+  audio: File,
+  text: string,
+  cover?: File | null,
+): Promise<JobMeta> {
   const form = new FormData()
   form.append('audio', audio)
   form.append('text', text)
+  if (cover) form.append('cover', cover)
   return request('/jobs', { method: 'POST', body: form })
 }
 
@@ -36,11 +41,17 @@ export function deleteJob(id: string): Promise<void> {
   return request(`/jobs/${id}`, { method: 'DELETE' })
 }
 
+export function retryJob(id: string): Promise<JobMeta> {
+  return request(`/jobs/${id}/retry`, { method: 'POST' })
+}
+
 export function getResult(id: string): Promise<JobResult> {
   return request(`/jobs/${id}/result`)
 }
 
 export const jobAudioUrl = (id: string) => `${BASE}/jobs/${id}/audio`
+
+export const jobCoverUrl = (id: string) => `${BASE}/jobs/${id}/cover`
 
 export interface ExportState {
   status: 'none' | 'queued' | 'rendering' | 'done' | 'failed'

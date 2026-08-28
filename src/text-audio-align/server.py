@@ -37,6 +37,7 @@ BASE_DIR = Path(__file__).resolve().parent
 JOBS_DIR = BASE_DIR / "jobs"
 
 ALLOWED_EXTS = {".mp3", ".wav", ".m4a", ".ogg", ".flac", ".opus", ".aac"}
+COVER_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
 MAX_CONTENT_LENGTH = 1024 ** 3  # 1 GiB
 MAX_TEXT_CHARS = 1_000_000
 
@@ -124,13 +125,15 @@ class JobManager:
 
     # ---------- 创建 / 删除 ----------
 
-    def create(self, audio_file, ext, text, display_name):
+    def create(self, audio_file, ext, text, display_name, cover_file=None, cover_ext=None):
         job_id = uuid.uuid4().hex[:12]
         job_dir = self.jobs_dir / job_id
         job_dir.mkdir(parents=True)
 
         audio_file.save(job_dir / f"audio{ext}")
         (job_dir / "text.txt").write_text(text, encoding="utf-8")
+        if cover_file is not None:
+            cover_file.save(job_dir / f"cover{cover_ext}")
 
         meta = {
             "id": job_id,
@@ -139,6 +142,7 @@ class JobManager:
             "stage": "queued",
             "progress": 0.0,
             "audio_ext": ext,
+            "cover_ext": cover_ext,
             "created_at": _now(),
             "updated_at": _now(),
             "duration": None,
@@ -148,6 +152,33 @@ class JobManager:
         }
         with self._lock:
             self._jobs[job_id] = meta
+            snapshot = dict(meta)
+        self._write_meta(snapshot)
+        self._queue.put(job_id)
+        return snapshot
+
+    def retry(self, job_id):
+        """重试失败（或已取消但分片还在）的任务：复位状态、排队重跑。
+
+        复用的是任务目录里的 audio/text.txt 原文，不需要前端重新上传。
+        若上一次取消已被工作线程清理（目录已删），会返回 None → 404。
+        """
+        with self._lock:
+            meta = self._jobs.get(job_id)
+            if meta is None:
+                return None
+            if meta["status"] not in ("failed", "cancelled"):
+                return dict(meta)
+            meta.update(
+                status="queued",
+                stage="queued",
+                progress=0.0,
+                error=None,
+                duration=None,
+                word_count=None,
+                cue_count=None,
+                updated_at=_now(),
+            )
             snapshot = dict(meta)
         self._write_meta(snapshot)
         self._queue.put(job_id)
@@ -362,12 +393,14 @@ class ExportManager:
             return
 
         self._update(job_id, status="rendering", progress=0.0)
+        cmd = [node, str(script), "--json", str(result), "--audio", str(audio), "--out", str(out)]
+        cover_ext = meta.get("cover_ext")
+        if cover_ext:
+            cover = job_dir / f"cover{cover_ext}"
+            if cover.exists():
+                cmd += ["--cover", str(cover)]
         try:
-            proc = subprocess.Popen(
-                [node, str(script), "--json", str(result), "--audio", str(audio), "--out", str(out)],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-            )
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         except OSError as exc:
             self._update(job_id, status="failed", error=f"启动导出进程失败：{exc}", finished_at=_now())
             return
@@ -475,6 +508,7 @@ def create_app(jobs_dir=JOBS_DIR, seed=True):
     @app.post("/api/jobs")
     def create_job():
         audio = request.files.get("audio")
+        cover = request.files.get("cover")
         text = (request.form.get("text") or "").strip()
 
         if audio is None or not audio.filename:
@@ -487,9 +521,15 @@ def create_app(jobs_dir=JOBS_DIR, seed=True):
             return jsonify(error="请输入要对齐的文本"), 400
         if len(text) > MAX_TEXT_CHARS:
             return jsonify(error="文本过长"), 400
+        cover_ext = None
+        if cover is not None and cover.filename:
+            cover_ext = Path(cover.filename).suffix.lower()
+            if cover_ext not in COVER_EXTS:
+                allowed = "、".join(sorted(e.lstrip(".") for e in COVER_EXTS))
+                return jsonify(error=f"不支持的封面格式 {cover_ext or '(无扩展名)'}，支持：{allowed}"), 400
 
         display_name = secure_filename(audio.filename) or f"audio{ext}"
-        meta = manager.create(audio, ext, text, display_name)
+        meta = manager.create(audio, ext, text, display_name, cover, cover_ext)
         return jsonify(meta), 201
 
     @app.get("/api/jobs/<job_id>")
@@ -523,6 +563,27 @@ def create_app(jobs_dir=JOBS_DIR, seed=True):
         return send_from_directory(
             manager.job_dir(job_id).resolve(), f"audio{meta['audio_ext']}"
         )
+
+    @app.get("/api/jobs/<job_id>/cover")
+    def get_cover(job_id):
+        meta = manager.get(job_id)
+        if meta is None:
+            return jsonify(error="任务不存在"), 404
+        cover_ext = meta.get("cover_ext")
+        if not cover_ext:
+            return jsonify(error="该任务没有封面"), 404
+        return send_from_directory(
+            manager.job_dir(job_id).resolve(), f"cover{cover_ext}", conditional=True
+        )
+
+    @app.post("/api/jobs/<job_id>/retry")
+    def retry_job(job_id):
+        meta = manager.retry(job_id)
+        if meta is None:
+            return jsonify(error="任务不存在"), 404
+        if meta["status"] != "queued":
+            return jsonify(error="仅失败或已取消的任务可重试", status=meta["status"]), 409
+        return jsonify(meta), 202
 
     @app.delete("/api/jobs/<job_id>")
     def delete_job(job_id):

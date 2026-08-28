@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ScrollRenderer, type ScrollData } from './scroll'
+import { ScrollRenderer, type CoverSource, type ScrollData } from './scroll'
 import {
   getExport,
   startExport,
@@ -17,10 +17,12 @@ export function ScrollPlayer({
   result,
   audioUrl,
   jobId,
+  coverUrl,
 }: {
   result: JobResult
   audioUrl: string
   jobId: string
+  coverUrl?: string | null
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const audioRef = useRef<HTMLAudioElement>(null)
@@ -48,12 +50,28 @@ export function ScrollPlayer({
     c.width = Math.round(W * dpr)
     c.height = Math.round(H * dpr)
     const renderer = new ScrollRenderer(W, H, dpr, data)
+    if (coverUrl) {
+      // 异步加载封面，加载完成后再贴入卷轴最右端（覆盖在首列之前）
+      const img = new Image()
+      img.onload = () => {
+        if (rendererRef.current === renderer && img.naturalWidth > 0) {
+          const cover: CoverSource = {
+            width: img.naturalWidth,
+            height: img.naturalHeight,
+            draw: (ctx, x, y, w, h) => ctx.drawImage(img, x, y, w, h),
+          }
+          renderer.setCover(cover)
+        }
+      }
+      img.onerror = () => {} // 封面加载失败不阻塞卷轴
+      img.src = coverUrl
+    }
     const ctx = c.getContext('2d')
     if (ctx) {
       renderer.draw(ctx, 0.05) // 首帧：趁进入等待，先落几笔淡墨
     }
     rendererRef.current = renderer
-  }, [data])
+  }, [data, coverUrl])
 
   useEffect(() => {
     let raf = 0

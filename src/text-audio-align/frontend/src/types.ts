@@ -7,6 +7,7 @@ export interface JobMeta {
   stage: string | null
   progress: number
   audio_ext: string
+  cover_ext: string | null
   created_at: string
   updated_at: string
   duration: number | null

@@ -46,11 +46,23 @@ export interface PlacedChar extends ScriptChar {
   row: number
 }
 
+/**
+ * 封面图像源：浏览器（HTMLImageElement 适配器）与无头导出
+ * （@napi-rs/canvas Image 适配器）共用同一接口，交给 setCover()。
+ */
+export interface CoverSource {
+  readonly width: number
+  readonly height: number
+  /** 在 (x, y) 处以 w×h 绘制。 */
+  draw(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void
+}
+
 export interface ScrollOptions {
   rows?: number // 每列最大字数
   entrySec?: number // 单个字符的入墨时长
   scaleIn?: number // 入墨起始缩放（相对 1）
   font?: string
+  cover?: CoverSource | null // 卷轴最右侧的全高封面（读序起点）
   style?: Partial<ScrollStyle>
 }
 
@@ -203,7 +215,9 @@ export class ScrollRenderer {
   private readonly scaleIn: number
   private readonly chars: PlacedChar[]
   private readonly duration: number
-  private readonly totalW: number
+  private totalW: number
+  private cover: CoverSource | null
+  private coverW: number // 封面在纸面上的宽度（占卷轴最右端一档）
 
   constructor(
     width: number,
@@ -227,12 +241,23 @@ export class ScrollRenderer {
     this.font = `${this.size}px ${opts.font ?? FONT_FALLBACK}`
     this.chars = layoutChars(buildChars(data), this.rows)
     this.duration = data.duration
-    this.totalW = this.margin * 2 + this.chars.length * this.colW
+    this.cover = opts.cover ?? null
+    this.coverW = this.cover
+      ? Math.max(0, Math.round((this.height * this.cover.width) / this.cover.height))
+      : 0
+    this.totalW = this.margin * 2 + this.chars.length * this.colW + this.coverW
   }
 
-  /** 纸面横坐标：第 col 列中心（col 递增 = 写在纸面上靠右）。 */
+  /** 更换封面：高度占满纸面，宽度按原图比例；封面占据卷轴最右端（读序起点）。 */
+  setCover(cover: CoverSource): void {
+    this.cover = cover
+    this.coverW = Math.max(0, Math.round((this.height * cover.width) / cover.height))
+    this.totalW = this.margin * 2 + this.chars.length * this.colW + this.coverW
+  }
+
+  /** 纸面横坐标：第 col 列中心（col 递增 = 写在纸面上靠右；封面带在首列左侧占宽）。 */
   private contentX(col: number): number {
-    return this.margin + (col + 0.5) * this.colW
+    return this.margin + this.coverW + (col + 0.5) * this.colW
   }
 
   /** 弹性卷位：已入墨的最后列 k 与当前笔位字的入墨进度 pk。 */
@@ -303,7 +328,7 @@ export class ScrollRenderer {
     ctx.strokeStyle = this.style.slipLine
     ctx.lineWidth = 1
     for (let col = 0; col <= this.chars.length; col++) {
-      const x = W - (this.margin + col * colW - shift) + 0.5
+      const x = W - (this.margin + this.coverW + col * colW - shift) + 0.5
       if (x < xl || x > xr) continue
       ctx.beginPath()
       ctx.moveTo(x, 0)
@@ -316,6 +341,16 @@ export class ScrollRenderer {
     ctx.fillStyle = this.style.roll
     ctx.fillRect(W - x1, 0, rodW, H)
     ctx.fillRect(W - x0 - rodW, 0, rodW, H)
+
+    // 卷轴最右端的封面（读序起点，屏幕右缘）：高度 100%，宽度按原图比例；
+    // 图片按屏幕方向正立绘制（仅位置镜像，不翻转内容）。
+    if (this.cover && this.coverW > 0) {
+      const cx = W - (this.margin + this.coverW - shift) // 封面带的屏幕左缘
+      this.cover.draw(ctx, cx, 0, this.coverW, H)
+      ctx.strokeStyle = 'rgba(80, 60, 30, 0.45)'
+      ctx.lineWidth = 2
+      ctx.strokeRect(cx + 1, 1, this.coverW - 2, H - 2)
+    }
     ctx.restore()
   }
 
