@@ -99,10 +99,16 @@ const VERTICAL_FORMS: Record<string, string> = {
   '…': '︙', // ︙ 竖排水平省略号
   '——': '︱', // ︱ 竖排破折号（双连字符）
   '—': '︱',
+  '《': '︽', // ︽ 竖排左书名号（双）
+  '》': '︾', // ︾ 竖排右书名号（双）
+  '〈': '︿', // ︿ 竖排左书名号（单）
+  '〉': '﹀', // ﹀ 竖排右书名号（单）
   '「': '﹁', // ﹁ 竖排左上角括号
   '」': '﹂', // ﹂ 竖排右上角括号
   '『': '﹃', // ﹃ 竖排左上角白括号
   '』': '﹄', // ﹄ 竖排右上角白括号
+  '“': '﹃', // 双引号 → 竖排白角括号
+  '”': '﹄',
   '(': '︵', // ︵ 竖排左括号
   '（': '︵',
   ')': '︶', // ︶ 竖排右括号
@@ -137,6 +143,7 @@ export function buildChars(data: ScrollData): ScriptChar[] {
   const out: ScriptChar[] = []
   let i = 0
   let lastT = 0
+  let quoteOpen = false
   for (const ch of data.text) {
     if (i < stream.length && stream[i].ch === ch) {
       lastT = stream[i].t
@@ -144,6 +151,10 @@ export function buildChars(data: ScrollData): ScriptChar[] {
       i += 1
     } else if (ch === '\n') {
       out.push({ ch, t: lastT })
+    } else if (ch === '"') {
+      // ASCII 引号不分开闭：按出现次序交替成竖排白角括号 ﹃/﹄
+      quoteOpen = !quoteOpen
+      out.push({ ch: quoteOpen ? '﹃' : '﹄', t: lastT })
     } else if (!/\s/.test(ch)) {
       out.push({ ch, t: lastT }) // 标点：跟前一字同时入墨
     }
