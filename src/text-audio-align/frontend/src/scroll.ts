@@ -4,10 +4,12 @@
  * 浏览器（ScrollPlayer）与无头导出（scripts/export-scroll.mjs）共用同一份代码，
  * 保证「播放」与「视频」的字幕入墨完全一致。
  *
- * 运动模型（弹性卷位）：
- *  - 纸面上列按书写顺序自左向右排列（layoutChars 第 0 列 = 最早的文字）；
- *  - 正在入墨的字符被钉在屏幕右侧的「笔位」上，纸卷因此在笔位处向左滑出
- *    一整列，先写好的字随之向左滑动、直到换回起点循环；
+ * 运动模型（弹性卷位，读序从右往左）：
+ *  - 纸面上列按书写顺序排列（layoutChars 第 0 列 = 最早的文字），整幅画面
+ *    水平镜像：第 0 列显现在最右侧，后续文字向左逐列排开；
+ *  - 正在入墨的字符被钉在屏幕左侧的「笔位」上，纸面因此在笔位处向右滑出
+ *    一整列，先写好的字随之向右滑动、直到换回起点循环；从左到右的画面顺序
+ *    是「新→旧」，读者按从右往左读即为正常的书写顺序；
  *  - 每个字符独立渐入：透明度 + 缩放 + 墨色渐变（从淡墨到浓墨），
  *    渐入时刻来自对齐器的逐词时间戳（buildChars 摊平为逐字并找回标点，
  *    标点跟随前一字的时刻入墨；段落换行另起一列）。
@@ -218,7 +220,8 @@ export class ScrollRenderer {
     this.margin = Math.round(this.height * 0.08)
     this.size = Math.floor((this.height - 2 * this.margin) / this.rows)
     this.colW = Math.round(this.size * 1.14)
-    this.penX = width - this.margin - this.colW / 2 // 笔位：屏幕右侧入墨点
+    // penX 是未镜像坐标里的右缘笔位；draw() 统一水平镜像后笔位落在左侧
+    this.penX = width - this.margin - this.colW / 2
     this.entrySec = opts.entrySec ?? 0.5
     this.scaleIn = opts.scaleIn ?? 0.88
     this.font = `${this.size}px ${opts.font ?? FONT_FALLBACK}`
@@ -276,11 +279,13 @@ export class ScrollRenderer {
 
   private drawBand(ctx: CanvasRenderingContext2D, shift: number): void {
     const { width: W, height: H, colW } = this
-    // 纸面横跨 [0, totalW]，随 shift 平移到屏幕
+    // 纸面横跨 [0, totalW]，随 shift 平移到屏幕；再水平镜像（读序从右往左）
     const x0 = -shift
     const x1 = x0 + this.totalW
-    const xl = Math.max(0, x0)
-    const xr = Math.min(W, x1)
+    const xa = W - x1
+    const xb = W - x0
+    const xl = Math.max(0, xa)
+    const xr = Math.min(W, xb)
 
     ctx.save()
     if (xr > xl) {
@@ -298,7 +303,7 @@ export class ScrollRenderer {
     ctx.strokeStyle = this.style.slipLine
     ctx.lineWidth = 1
     for (let col = 0; col <= this.chars.length; col++) {
-      const x = this.margin + col * colW - shift + 0.5
+      const x = W - (this.margin + col * colW - shift) + 0.5
       if (x < xl || x > xr) continue
       ctx.beginPath()
       ctx.moveTo(x, 0)
@@ -309,8 +314,8 @@ export class ScrollRenderer {
     // 卷轴两端的木杆
     const rodW = Math.round(colW * 0.66)
     ctx.fillStyle = this.style.roll
-    ctx.fillRect(x0, 0, rodW, H)
-    ctx.fillRect(x1 - rodW, 0, rodW, H)
+    ctx.fillRect(W - x1, 0, rodW, H)
+    ctx.fillRect(W - x0 - rodW, 0, rodW, H)
     ctx.restore()
   }
 
@@ -356,7 +361,7 @@ export class ScrollRenderer {
     ctx.textBaseline = 'middle'
     const marginTop = this.margin + this.size / 2
     for (const c of this.chars) {
-      const x = this.contentX(c.col) - shift
+      const x = W - (this.contentX(c.col) - shift) // 水平镜像：读序从右往左
       if (x < -this.size || x > W + this.size) continue
       const y = marginTop + c.row * this.size
       // 尚未到渐入时刻的字不画（每轮重新入墨）
