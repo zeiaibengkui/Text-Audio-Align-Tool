@@ -45,6 +45,8 @@ Frontend (`src/text-audio-align/frontend/`): use **pnpm** (`npm` is broken with 
 
 Alignment outlives HTTP timeouts, so it's job-based: `POST /api/jobs` returns a job id immediately; poll `GET /api/jobs/<id>` for status; `GET /api/jobs/<id>/result` when done; audio at `GET /api/jobs/<id>/audio` (Range requests → 206, gives the player seek). One daemon worker thread pulls from a queue. Jobs persist under `jobs/<id>/` (`meta.json` written tmp-file + `os.replace`; in-memory dict is authoritative). On restart, queued/running jobs are marked failed — their worker is gone. Cancellation: `progress_cb` raises `JobCancelled` at a chunk boundary. `seed_sample_job()` pre-populates a `sample` (done) job from repo `data/` + `align.json` on first start. Run with `use_reloader=False` — the reloader forks and loads the model twice.
 
+Scroll export to MP4 follows the same job shape: `POST /api/jobs/<id>/export` → poll `GET /api/jobs/<id>/export` (in-memory status, progress % parsed from the subprocess stdout) → `GET /api/jobs/<id>/export.mp4` when done. The server shells out to `frontend/scripts/export-scroll.mjs` via `node` (and `ffmpeg` on PATH); state lives only in memory, so after a restart an in-flight export is gone and re-POST regenerates. The mp4 lands at `jobs/<id>/scroll.mp4` (gitignored).
+
 ## Conventions
 
 - Python docstrings/comments, error messages, and UI strings are in Chinese — match that.

@@ -133,6 +133,11 @@ pnpm lint           # oxlint
 
 (npm is broken for this package — EBADDEVENGINES, the repo pins pnpm; keep using pnpm.)
 
+The scroll view also has a 导出视频 button: it asks the job server to render the
+MP4 server-side (`POST /api/jobs/<id>/export`, poll `GET /api/jobs/<id>/export`,
+download `/api/jobs/<id>/export.mp4` — the file lands at `jobs/<id>/scroll.mp4`,
+so that same node/ffmpeg pipeline is what a browser click triggers).
+
 The scroll view shares its entire renderer with the headless video exporter, which
 renders a finished MP4 from `align.json` (or a per-job `result.json`), muxing the
 original audio back in:

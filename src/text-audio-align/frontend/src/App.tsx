@@ -341,6 +341,7 @@ function App() {
                     key={selected.id}
                     result={result}
                     audioUrl={jobAudioUrl(selected.id)}
+                    jobId={selected.id}
                   />
                 ) : (
                   <>

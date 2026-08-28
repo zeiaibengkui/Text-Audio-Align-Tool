@@ -17,7 +17,10 @@
 import json
 import os
 import queue
+import re
+import select
 import shutil
+import subprocess
 import threading
 import time
 import traceback
@@ -299,6 +302,106 @@ def get_aligner():
     return align_core.get_aligner(os.environ.get("ALIGN_DEVICE"))
 
 
+class ExportManager:
+    """竹简卷轴 → MP4 导出。
+
+    复刻任务队列的形态：POST 立即返回状态，后台线程调起 frontend 的
+    scripts/export-scroll.mjs（@napi-rs/canvas + ffmpeg 无头渲染，与浏览器
+    播放共用 scroll.ts），按它的 stdout 进度更新百分比。输出落盘到
+    jobs/<id>/scroll.mp4。状态只存在于内存（瞬态），上一轮进程带走的渲染
+    不可能续上，重启后再点一次就是。
+
+    渲染满时长视频是分钟级的（约 1.4× 实时），所以这里只允许每个任务
+    同时跑一个导出：已在排队/进行中时 POST 直接返回当前状态。
+    """
+
+    def __init__(self, jobs_dir=JOBS_DIR):
+        self.jobs_dir = Path(jobs_dir)
+        self._exports = {}
+        self._lock = threading.Lock()
+
+    def get(self, job_id):
+        with self._lock:
+            state = self._exports.get(job_id)
+            return dict(state) if state else None
+
+    def _update(self, job_id, **fields):
+        with self._lock:
+            state = self._exports.setdefault(job_id, {"job_id": job_id})
+            state.update(fields)
+            return dict(state)
+
+    def ensure(self, meta):
+        """幂等启动：进行中/已完成时返回现有状态，否则开线程渲染。"""
+        job_id = meta["id"]
+        existing = self.get(job_id)
+        if existing and existing.get("status") in ("queued", "rendering", "done"):
+            return existing
+        self._update(job_id, status="queued", progress=0.0)
+        threading.Thread(target=self._run, args=(meta,), daemon=True).start()
+        return self.get(job_id)
+
+    def _run(self, meta):
+        job_id = meta["id"]
+        script = BASE_DIR / "frontend" / "scripts" / "export-scroll.mjs"
+        job_dir = self.jobs_dir / job_id
+        result = job_dir / "result.json"
+        audio = job_dir / f"audio{meta['audio_ext']}"
+        out = job_dir / "scroll.mp4"
+
+        if not (script.exists() and result.exists() and audio.exists()):
+            self._update(
+                job_id, status="failed",
+                error="导出资源缺失（result.json / audio / 导出脚本）",
+                finished_at=_now(),
+            )
+            return
+        node = shutil.which("node")
+        if node is None:
+            self._update(job_id, status="failed", error="找不到 node（导出需要它）", finished_at=_now())
+            return
+
+        self._update(job_id, status="rendering", progress=0.0)
+        try:
+            proc = subprocess.Popen(
+                [node, str(script), "--json", str(result), "--audio", str(audio), "--out", str(out)],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+            )
+        except OSError as exc:
+            self._update(job_id, status="failed", error=f"启动导出进程失败：{exc}", finished_at=_now())
+            return
+
+        # 只从管道尾部抽进度（脚本用 \r 覆盖写百分比，行缓冲读不到换行）
+        progress = 0.0
+        buf = b""
+        fd = proc.stdout.fileno()
+        while True:
+            ready, _, _ = select.select([fd], [], [], 0.5)
+            if fd in ready:
+                chunk = os.read(fd, 65536)
+                if not chunk:
+                    break
+                buf = (buf + chunk)[-256:]
+                tail = re.findall(rb"(\d+)%", buf)
+                if tail:
+                    progress = max(progress, int(tail[-1]) / 100)
+                    self._update(job_id, progress=round(progress, 4))
+            if proc.poll() is not None:
+                break
+        rc = proc.wait()
+
+        if rc == 0 and out.exists():
+            self._update(job_id, status="done", progress=1.0, finished_at=_now())
+        else:
+            tail = buf.decode("utf-8", "replace")[-400:]
+            self._update(
+                job_id, status="failed",
+                error=f"导出失败（退出码 {rc}）：{tail}",
+                finished_at=_now(),
+            )
+
+
 def seed_sample_job(manager):
     """把仓库里现成的 data/ + align.json 灌成一个已完成任务。
 
@@ -426,6 +529,37 @@ def create_app(jobs_dir=JOBS_DIR, seed=True):
         if not manager.delete(job_id):
             return jsonify(error="任务不存在"), 404
         return "", 204
+
+    exports = ExportManager(jobs_dir)
+
+    @app.post("/api/jobs/<job_id>/export")
+    def start_export(job_id):
+        meta = manager.get(job_id)
+        if meta is None:
+            return jsonify(error="任务不存在"), 404
+        if meta["status"] != "done":
+            return jsonify(error="任务尚未完成", status=meta["status"]), 409
+        state = exports.ensure(meta)
+        return jsonify(state), (200 if state["status"] == "done" else 202)
+
+    @app.get("/api/jobs/<job_id>/export")
+    def get_export(job_id):
+        if manager.get(job_id) is None:
+            return jsonify(error="任务不存在"), 404
+        state = exports.get(job_id)
+        return jsonify(state or {"status": "none"})
+
+    @app.get("/api/jobs/<job_id>/export.mp4")
+    def get_export_video(job_id):
+        meta = manager.get(job_id)
+        if meta is None:
+            return jsonify(error="任务不存在"), 404
+        state = exports.get(job_id)
+        if not state or state.get("status") != "done":
+            return jsonify(error="视频尚未导出完成"), 409
+        return send_from_directory(
+            manager.job_dir(job_id).resolve(), "scroll.mp4", conditional=True
+        )
 
     return app
 

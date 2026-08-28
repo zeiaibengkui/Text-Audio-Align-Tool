@@ -41,3 +41,19 @@ export function getResult(id: string): Promise<JobResult> {
 }
 
 export const jobAudioUrl = (id: string) => `${BASE}/jobs/${id}/audio`
+
+export interface ExportState {
+  status: 'none' | 'queued' | 'rendering' | 'done' | 'failed'
+  progress?: number | null
+  error?: string | null
+}
+
+export function startExport(id: string): Promise<ExportState> {
+  return request(`/jobs/${id}/export`, { method: 'POST' })
+}
+
+export function getExport(id: string): Promise<ExportState> {
+  return request(`/jobs/${id}/export`)
+}
+
+export const exportVideoUrl = (id: string) => `${BASE}/jobs/${id}/export.mp4`
