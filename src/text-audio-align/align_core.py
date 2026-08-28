@@ -10,11 +10,43 @@
 
 import math
 import subprocess
+import threading
+from pathlib import Path
 
 from qwen_aligner_toolkit import Aligner
+from qwen_aligner_toolkit.audio import load_audio
 
+# 这两个相对路径是导出契约的一部分：export_align.py 会把 AUDIO_FILE 原样写进
+# align.json，供 subtitles.html 当相对 URL 用。所以字面值保持不变，只在真正
+# 读文件时才解析成绝对路径。
 TEXT_FILE = "./data/text.txt"
 AUDIO_FILE = "data/audio.mp3"
+
+_BASE = Path(__file__).resolve().parent
+
+_aligner = None
+_aligner_lock = threading.Lock()
+
+
+def _resolve(path):
+    """按本文件所在目录解析相对路径，使调用方的 cwd 不再影响结果。"""
+    p = Path(path)
+    return p if p.is_absolute() else _BASE / p
+
+
+def get_aligner(device=None):
+    """惰性加载并复用对齐器。模型加载是一次性的主要开销，务必只做一次。
+
+    device 留空时由 toolkit 自行决定（当前机器无 CUDA，会落到 CPU）；
+    传 "xpu" 可试用 Intel GPU，但 toolkit 对此路径未经验证。
+    """
+    global _aligner
+    if _aligner is None:
+        with _aligner_lock:
+            if _aligner is None:
+                kwargs = {"device_map": device} if device else {}
+                _aligner = Aligner.from_pretrained(**kwargs)
+    return _aligner
 
 
 def clean_positions(text, words):
@@ -114,15 +146,29 @@ def split_text_by_weight(text, k):
     return chunks
 
 
-def align_chunked(aligner, text, audio, dur, target_sec=130.0):
-    """把整段音频按时间切成若干段，逐段对齐，绕开模型对超长音频的限制。"""
+def align_chunked(aligner, text, audio, dur, target_sec=130.0, progress_cb=None):
+    """把整段音频按时间切成若干段，逐段对齐，绕开模型对超长音频的限制。
+
+    这里逐段调用 align_segments，而不是一次传入全部段落。两者输出完全一致：
+    toolkit 内部本身就是按段独立对齐再顺序拼接，每段的 offset 只由该段的
+    start 决定，段之间没有共享状态。拆开的好处是能在段边界上报进度、
+    响应取消。为避免每次调用都重新解码音频，先解码一次再传 (波形, 采样率)。
+
+    progress_cb(done, total) 在每段完成后调用；抛异常即可中止对齐。
+    """
     k = max(3, math.ceil(dur / target_sec))
     chunks = split_text_by_weight(text, k)
-    segments = [
-        {"text": c, "start": i * dur / k, "end": min((i + 1) * dur / k, dur)}
-        for i, c in enumerate(chunks)
-    ]
-    return aligner.align_segments(segments, audio, language="Chinese", padding_sec=0.3)
+    decoded = load_audio(_resolve(audio) if isinstance(audio, (str, Path)) else audio)
+
+    words = []
+    for i, c in enumerate(chunks):
+        seg = [{"text": c, "start": i * dur / k, "end": min((i + 1) * dur / k, dur)}]
+        words.extend(
+            aligner.align_segments(seg, decoded, language="Chinese", padding_sec=0.3)
+        )
+        if progress_cb:
+            progress_cb(i + 1, k)
+    return words
 
 
 def _interp(result, lo, hi, t0, t1):
@@ -175,13 +221,19 @@ def write_srt(cues, path="subtitles.srt"):
             f.write(f"{i}\n{ts(start)} --> {ts(end)}\n{text}\n\n")
 
 
-def load_data():
-    """运行对齐，返回 (text, words, cues, duration)。时间戳来自模型输出。"""
-    aligner = Aligner.from_pretrained()
-    with open(TEXT_FILE, encoding="utf-8") as f:
+def load_data(aligner=None, text_file=None, audio_file=None, progress_cb=None):
+    """运行对齐，返回 (text, words, cues, duration)。时间戳来自模型输出。
+
+    默认沿用模块级的 TEXT_FILE / AUDIO_FILE，命令行用法不受影响；
+    服务端则传入具体任务的绝对路径与进度回调。
+    """
+    aligner = aligner or get_aligner()
+    text_path = _resolve(text_file or TEXT_FILE)
+    audio_path = _resolve(audio_file or AUDIO_FILE)
+    with open(text_path, encoding="utf-8") as f:
         text = f.read()
-    dur = audio_duration(AUDIO_FILE)
-    words = align_chunked(aligner, text, AUDIO_FILE, dur)
+    dur = audio_duration(audio_path)
+    words = align_chunked(aligner, text, audio_path, dur, progress_cb=progress_cb)
     words = smooth_words(words, dur)
     return text, words, build_cues(words, text), dur
 
@@ -194,7 +246,7 @@ def load_cues():
 def audio_duration(path):
     out = subprocess.check_output(
         ["ffprobe", "-v", "error", "-show_entries", "format=duration",
-         "-of", "default=noprint_wrappers=1:nokey=1", path]
+         "-of", "default=noprint_wrappers=1:nokey=1", str(_resolve(path))]
     )
     return float(out.strip())
 

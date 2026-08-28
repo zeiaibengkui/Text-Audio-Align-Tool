@@ -15,6 +15,9 @@ wheels/
 # Generated subtitles (regenerable from the scripts)
 *.srt
 
+# Uploaded audio + alignment results from the job server
+src/text-audio-align/jobs/
+
 # OS/editor
 .DS_Store
 
