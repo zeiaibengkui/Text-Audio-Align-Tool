@@ -305,6 +305,64 @@
   padding-bottom: 10px;
 }
 
+.result-head-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.view-switch {
+  display: flex;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.seg {
+  font: inherit;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: var(--ink-2);
+  background: var(--panel);
+  border: none;
+  padding: 7px 12px;
+  cursor: pointer;
+}
+
+.seg + .seg {
+  border-left: 1px solid var(--line);
+}
+
+.seg:hover {
+  color: var(--ink);
+}
+
+.seg-on {
+  color: var(--panel);
+  background: var(--seal);
+}
+
+.scroll-player {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.scroll-canvas {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #3b342a;
+  border-radius: 10px;
+  display: block;
+}
+
+.scroll-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
 .result-title {
   font: 500 18px/1.5 var(--display);
   letter-spacing: 0.08em;

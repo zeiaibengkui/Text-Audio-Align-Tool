@@ -115,17 +115,35 @@ React 19 + Vite + TypeScript workbench in `frontend/` (`@vitejs/plugin-react` wi
 React Compiler Babel preset, oxlint, no CSS framework). It drives the job server over
 `/api`: pick an audio file, paste the text, submit — the job list polls and shows
 progress — then a completed job opens a cue sheet with an audio player, a time playhead
-sweeping down the lines during playback, and click-to-seek on any cue. In dev, Vite
-proxies `/api` to `127.0.0.1:5000` (`server.proxy` in `vite.config.ts` — change the
-target if the server runs elsewhere). It does not read the static `align.json`; each
-job's own `result.json` is what the UI renders.
+sweeping down the lines during playback, and click-to-seek on any cue. A 字幕表 / 竹简卷轴
+toggle switches to the scroll rendering: vertical text columns, each character fading in
+(alpha, scale, blur, ink gradient) at its aligned timestamp, the scroll cycling
+right→left in sync with the audio. In dev, Vite proxies `/api` to `127.0.0.1:5000`
+(`server.proxy` in `vite.config.ts` — change the target if the server runs elsewhere).
+It does not read the static `align.json`; each job's own `result.json` is what the UI
+renders.
 
 ```sh
 cd src/text-audio-align/frontend
-npm install
-npm run dev         # http://localhost:5173
-npm run build       # tsc -b && vite build
-npm run lint        # oxlint
+pnpm install
+pnpm dev            # http://localhost:5173
+pnpm build          # tsc -b && vite build
+pnpm lint           # oxlint
 ```
+
+(npm is broken for this package — EBADDEVENGINES, the repo pins pnpm; keep using pnpm.)
+
+The scroll view shares its entire renderer with the headless video exporter, which
+renders a finished MP4 from `align.json` (or a per-job `result.json`), muxing the
+original audio back in:
+
+```sh
+pnpm export:scroll -- --json ../align.json --audio ../data/audio.mp3 --out scroll.mp4
+#   [--fps 25] [--size 1280x720] [--rows 12] [--dur 12] [--no-audio]
+```
+
+`--dur` clips both the timeline and the timestamps, for short preview renders. The
+exporter resolves system `Noto Serif CJK SC` via `fc-match` — do not use the rotated
+FangSong variant for canvas text.
 
 No tests.

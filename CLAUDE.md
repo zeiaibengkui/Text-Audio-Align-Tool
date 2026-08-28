@@ -21,7 +21,7 @@ ALIGN_FAKE=1 ../../.venv/bin/python server.py   # same server, no model (seconds
 
 All scripts use relative paths (`./data/text.txt`, `data/audio.mp3`) — run from `src/text-audio-align/`. Alignment loads the model and takes minutes; it is not an edit-test loop. `ALIGN_FAKE=1` is the quick path.
 
-Frontend (`src/text-audio-align/frontend/`): `npm run dev` / `npm run build` / `npm run lint` (oxlint). No test suite exists.
+Frontend (`src/text-audio-align/frontend/`): use **pnpm** (`npm` is broken with EBADDEVENGINES — devEngines pins pnpm). `pnpm dev` / `pnpm build` / `pnpm lint` (oxlint), `pnpm exec tsc -b` for type-checking only. No test suite exists. Export the scroll to video with `pnpm export:scroll -- --json ../align.json --audio ../data/audio.mp3 --out scroll.mp4` (or `node scripts/export-scroll.mjs ...`).
 
 ## Environment
 
@@ -49,4 +49,5 @@ Alignment outlives HTTP timeouts, so it's job-based: `POST /api/jobs` returns a 
 
 - Python docstrings/comments, error messages, and UI strings are in Chinese — match that.
 - `align_core.py` is the import target; `main.py` is legacy (no chunking, no punctuation restoration) and `asr.py` is a scratch FunASR snippet that hardcodes `device="cuda"` (fails here) and a missing `clip_0001.opus` — neither is safe to rely on.
-- `frontend/` (React 19 + Vite + TS, React Compiler via Babel preset, oxlint) is the workbench UI: upload audio + text → POST /api/jobs → poll list → render `result.json` cues with a time playhead. Dev traffic goes through Vite's proxy (`/api` → `127.0.0.1:5000` in `vite.config.ts`), so the Flask app needs no CORS. It does not consume the static `align.json`. No test suite.
+- `frontend/` (React 19 + Vite + TS, React Compiler via Babel preset, oxlint) is the workbench UI: upload audio + text → POST /api/jobs → poll list → render `result.json` cues with a time playhead, or the 竹简卷轴 scroll view. Dev traffic goes through Vite's proxy (`/api` → `127.0.0.1:5000` in `vite.config.ts`), so the Flask app needs no CORS. It does not consume the static `align.json`. No test suite.
+- 竹简卷轴 (`src/scroll.ts` + `ScrollPlayer.tsx`) renders the aligner timestamps as a bamboo scroll: vertical text (12 rows/col), the inking character pinned at a pen position at the right edge, already-written text sliding left one column per column, cycling when the audio loops. `src/scroll.ts` is pure canvas and shared verbatim between the browser player and `scripts/export-scroll.mjs` (headless MP4 via @napi-rs/canvas → ffmpeg rawpipe; font in exports is `fc-match` on system Noto Serif CJK SC — the rotated FangSong variant must be avoided).

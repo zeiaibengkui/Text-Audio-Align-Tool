@@ -7,6 +7,7 @@ import {
   jobAudioUrl,
   listJobs,
 } from './api'
+import { ScrollPlayer } from './ScrollPlayer'
 import type { Health, JobMeta, JobResult } from './types'
 import './App.css'
 
@@ -45,7 +46,13 @@ function App() {
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState('')
   const [pos, setPos] = useState(0)
+  const [view, setView] = useState<'cues' | 'scroll'>('cues')
   const audioRef = useRef<HTMLAudioElement>(null)
+
+  const selectJob = (id: string | null) => {
+    setView('cues')
+    setSelectedId(id)
+  }
 
   // ---- server health (one-shot) ----
   useEffect(() => {
@@ -148,7 +155,7 @@ function App() {
     setFormError('')
     try {
       const job = await createJob(audioFile, text.trim())
-      setSelectedId(job.id)
+      selectJob(job.id)
       setAudioFile(null)
       setText('')
     } catch (err) {
@@ -160,7 +167,7 @@ function App() {
 
   const onDelete = async (id: string) => {
     await deleteJob(id)
-    if (selectedId === id) setSelectedId(null)
+    if (selectedId === id) selectJob(null)
   }
 
   const pct =
@@ -237,9 +244,9 @@ function App() {
                     }
                     role="button"
                     tabIndex={0}
-                    onClick={() => setSelectedId(job.id)}
+                    onClick={() => selectJob(job.id)}
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') setSelectedId(job.id)
+                      if (e.key === 'Enter' || e.key === ' ') selectJob(job.id)
                     }}
                   >
                     <span className={`badge badge-${job.status}`}>{job.status}</span>
@@ -303,40 +310,70 @@ function App() {
             result && (
               <>
                 <header className="result-head">
-                  <h2 className="result-title">{result.text.slice(0, 24)}…</h2>
+                  <div className="result-head-row">
+                    <h2 className="result-title">{result.text.slice(0, 24)}…</h2>
+                    <div className="view-switch" role="tablist" aria-label="视图">
+                      <button
+                        className={'seg' + (view === 'cues' ? ' seg-on' : '')}
+                        onClick={() => setView('cues')}
+                        role="tab"
+                        aria-selected={view === 'cues'}
+                      >
+                        字幕表
+                      </button>
+                      <button
+                        className={'seg' + (view === 'scroll' ? ' seg-on' : '')}
+                        onClick={() => setView('scroll')}
+                        role="tab"
+                        aria-selected={view === 'scroll'}
+                      >
+                        竹简卷轴
+                      </button>
+                    </div>
+                  </div>
                   <p className="result-stats">
                     时长 {fmtTime(result.duration)} · {result.words.length} 词 ·{' '}
                     {result.cues.length} 条字幕
                   </p>
                 </header>
-                <audio
-                  key={selected.id}
-                  ref={audioRef}
-                  controls
-                  preload="metadata"
-                  src={jobAudioUrl(selected.id)}
-                  onTimeUpdate={(e) => setPos(e.currentTarget.currentTime)}
-                  className="player"
-                />
-                <p className="playhead-now">
-                  <span className="now-time">{fmtTime(pos, 1)}</span>
-                </p>
-                <div className="cues">
-                  <div className="playhead" style={{ top: `${pct}%` }} aria-hidden="true">
-                    <span className="playhead-dot" />
-                  </div>
-                  {result.cues.map((c, i) => (
-                    <button
-                      key={i}
-                      id={`cue-${i}`}
-                      className={'cue' + (i === activeIdx ? ' cue-active' : '')}
-                      onClick={() => seekTo(c.start)}
-                    >
-                      <span className="cue-time">{fmtTime(c.start)}</span>
-                      {c.text}
-                    </button>
-                  ))}
-                </div>
+                {view === 'scroll' ? (
+                  <ScrollPlayer
+                    key={selected.id}
+                    result={result}
+                    audioUrl={jobAudioUrl(selected.id)}
+                  />
+                ) : (
+                  <>
+                    <audio
+                      key={selected.id}
+                      ref={audioRef}
+                      controls
+                      preload="metadata"
+                      src={jobAudioUrl(selected.id)}
+                      onTimeUpdate={(e) => setPos(e.currentTarget.currentTime)}
+                      className="player"
+                    />
+                    <p className="playhead-now">
+                      <span className="now-time">{fmtTime(pos, 1)}</span>
+                    </p>
+                    <div className="cues">
+                      <div className="playhead" style={{ top: `${pct}%` }} aria-hidden="true">
+                        <span className="playhead-dot" />
+                      </div>
+                      {result.cues.map((c, i) => (
+                        <button
+                          key={i}
+                          id={`cue-${i}`}
+                          className={'cue' + (i === activeIdx ? ' cue-active' : '')}
+                          onClick={() => seekTo(c.start)}
+                        >
+                          <span className="cue-time">{fmtTime(c.start)}</span>
+                          {c.text}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
               </>
             )}
           {selected && selected.status === 'done' && resultError && (
