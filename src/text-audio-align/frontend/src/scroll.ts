@@ -11,6 +11,8 @@
  *  - 每个字符独立渐入：透明度 + 缩放 + 墨色渐变（从淡墨到浓墨），
  *    渐入时刻来自对齐器的逐词时间戳（buildChars 摊平为逐字并找回标点，
  *    标点跟随前一字的时刻入墨；段落换行另起一列）。
+ *  - 竖排标点：绘制时把横排标点换成竖排形式（U+FE10–FE1F 竖排形式、
+ *    U+FE30–FE4F 的竖排括号/破折号），见 toVertical()。
  */
 
 export interface Word {
@@ -72,6 +74,46 @@ const FONT_FALLBACK = "'Noto Serif CJK SC', 'AR PL UKai CN', 'KaiTi', 'SimSun', 
 
 function easeOut(p: number): number {
   return 1 - Math.pow(1 - p, 3)
+}
+
+/**
+ * 竖排标点映射表：横排标点 → 竖排形式。
+ * U+FE10–FE1F（竖排形式）+ 部分 U+FE30–FE4F（CJK 兼容符号：竖排括号/破折号）。
+ * 全角 ，！？等与半角同义，一并替换。
+ */
+const VERTICAL_FORMS: Record<string, string> = {
+  ',': '︐', // ︐ 竖排逗号
+  '，': '︐',
+  '、': '︑', // ︑ 竖排顿号
+  '。': '︒', // ︒ 竖排句号
+  ':': '︓', // ︓ 竖排冒号
+  '：': '︓',
+  ';': '︔', // ︔ 竖排分号
+  '；': '︔',
+  '!': '︕', // ︕ 竖排叹号
+  '！': '︕',
+  '?': '︖', // ︖ 竖排问号
+  '？': '︖',
+  '〖': '︗', // ︗ 竖排左空心括号
+  '〗': '︘', // ︘ 竖排右空心括号
+  '…': '︙', // ︙ 竖排水平省略号
+  '——': '︱', // ︱ 竖排破折号（双连字符）
+  '—': '︱',
+  '「': '﹁', // ﹁ 竖排左上角括号
+  '」': '﹂', // ﹂ 竖排右上角括号
+  '『': '﹃', // ﹃ 竖排左上角白括号
+  '』': '﹄', // ﹄ 竖排右上角白括号
+  '(': '︵', // ︵ 竖排左括号
+  '（': '︵',
+  ')': '︶', // ︶ 竖排右括号
+  '）': '︶',
+  '{': '︷', // ︷ 竖排左花括号
+  '}': '︸', // ︸ 竖排右花括号
+}
+
+/** 竖排文本中标点使用竖排形式；无对应则原样返回。 */
+export function toVertical(ch: string): string {
+  return VERTICAL_FORMS[ch] ?? ch
 }
 
 /**
@@ -287,7 +329,7 @@ export class ScrollRenderer {
     const s = 1 - (1 - q) * (1 - this.scaleIn)
     ctx.translate(x, y)
     ctx.scale(s, s)
-    ctx.fillText(ch, 0, 0)
+    ctx.fillText(toVertical(ch), 0, 0)
     ctx.restore()
   }
 

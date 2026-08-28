@@ -117,8 +117,9 @@ React Compiler Babel preset, oxlint, no CSS framework). It drives the job server
 progress — then a completed job opens a cue sheet with an audio player, a time playhead
 sweeping down the lines during playback, and click-to-seek on any cue. A 字幕表 / 竹简卷轴
 toggle switches to the scroll rendering: vertical text columns, each character fading in
-(alpha, scale, blur, ink gradient) at its aligned timestamp, the scroll cycling
-right→left in sync with the audio. In dev, Vite proxies `/api` to `127.0.0.1:5000`
+(alpha, scale, ink gradient) at its aligned timestamp, punctuation drawn in its vertical
+presentation form (`。`→`︒`, `，`→`︐`, …), the scroll cycling right→left in sync with
+the audio. In dev, Vite proxies `/api` to `127.0.0.1:5000`
 (`server.proxy` in `vite.config.ts` — change the target if the server runs elsewhere).
 It does not read the static `align.json`; each job's own `result.json` is what the UI
 renders.
