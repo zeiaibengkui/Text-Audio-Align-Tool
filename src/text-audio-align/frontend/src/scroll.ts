@@ -9,7 +9,8 @@
  *  - 正在入墨的字符被钉在屏幕右侧的「笔位」上，纸卷因此在笔位处向左滑出
  *    一整列，先写好的字随之向左滑动、直到换回起点循环；
  *  - 每个字符独立渐入：透明度 + 缩放 + 墨色渐变（从淡墨到浓墨），
- *    渐入时刻来自对齐器的逐词时间戳（buildChars 摊平为逐字）。
+ *    渐入时刻来自对齐器的逐词时间戳（buildChars 摊平为逐字并找回标点，
+ *    标点跟随前一字的时刻入墨；段落换行另起一列）。
  */
 
 export interface Word {
@@ -73,7 +74,11 @@ function easeOut(p: number): number {
   return 1 - Math.pow(1 - p, 3)
 }
 
-/** 把对齐词时间戳摊平为逐字渐入时刻；words 为空时退回 cues 均匀摊平。 */
+/**
+ * 把对齐词时间戳摊平为逐字渐入时刻；words 为空时退回 cues 均匀摊平。
+ * words 只含汉字/数字（不要丢标点），所以逐字对照 data.text 找回标点：
+ * 标点沿用前一字的时间（停顿落在字后），空白不占格，\n 让 layoutChars 另起一列。
+ */
 export function buildChars(data: ScrollData): ScriptChar[] {
   if (data.words.length === 0) {
     return data.cues.flatMap((c) => {
@@ -82,20 +87,42 @@ export function buildChars(data: ScrollData): ScriptChar[] {
       return chars.map((ch, i) => ({ ch, t: c.start + i * step }))
     })
   }
-  return data.words.flatMap((w) => {
+  const stream: ScriptChar[] = data.words.flatMap((w) => {
     const chars = [...w.text]
     const step = (w.end - w.start) / chars.length
     return chars.map((ch, i) => ({ ch, t: w.start + i * step }))
   })
+  const out: ScriptChar[] = []
+  let i = 0
+  let lastT = 0
+  for (const ch of data.text) {
+    if (i < stream.length && stream[i].ch === ch) {
+      lastT = stream[i].t
+      out.push({ ch, t: lastT })
+      i += 1
+    } else if (ch === '\n') {
+      out.push({ ch, t: lastT })
+    } else if (!/\s/.test(ch)) {
+      out.push({ ch, t: lastT }) // 标点：跟前一字同时入墨
+    }
+    // 其余空白不占格
+  }
+  return out
 }
 
-/** 把逐字时间序列排到卷轴列网格上（col 递增 = 向左）；分句后另起一列。 */
+/** 把逐字时间序列排到卷轴列网格上（col 递增 = 向左）；换行与分句后另起一列。 */
 export function layoutChars(chars: ScriptChar[], rows: number): PlacedChar[] {
   const SENT_END = /[。！？!?；:]/
   const placed: PlacedChar[] = []
   let col = 0
   let row = 0
   for (const c of chars) {
+    if (c.ch === '\n') {
+      // 段落换行：另起一列（不占格）
+      col += 1
+      row = 0
+      continue
+    }
     placed.push({ ...c, col, row })
     row += 1
     if (row >= rows || (SENT_END.test(c.ch) && row < rows)) {
