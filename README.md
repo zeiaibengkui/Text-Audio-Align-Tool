@@ -76,8 +76,7 @@ data/text.txt + data/audio.mp3
         ▼  export_align.py
    align.json  { audio, duration, text, words[], cues[] }
         │
-        ├──► frontend/         Vue 3 reader (the real UI)
-        └──► subtitles.html    standalone single-file viewer, no build step
+        └──► frontend/         Vite + React 19 scaffold — reader UI not rebuilt yet
 ```
 
 `align_core.py` run directly (`python align_core.py`) writes `subtitles.srt` and nothing else.
@@ -89,6 +88,8 @@ data/text.txt + data/audio.mp3
 | `align_core.py` | Alignment + cue-building core. Import this. |
 | `export_align.py` | Runs the pipeline, writes `align.json` for the frontend. |
 | `main.py` | Older standalone: aligns in one pass, groups at 15 chars, writes SRT. Superseded by `align_core.py` — no chunking, no punctuation restoration. |
+| `server.py` | Flask job server: upload → async queue → poll → result. `ALIGN_FAKE=1` swaps in `fake_aligner.py`. |
+| `fake_aligner.py` | Model-less Aligner stand-in for dev (`ALIGN_FAKE=1`). Emits fake but shape-identical word timestamps in seconds. |
 | `asr.py` | Scratch FunASR snippet. Points at a `clip_0001.opus` that isn't in the repo, and hardcodes `device="cuda"`, which fails here (see Environment). |
 
 All of these use **relative paths** (`./data/text.txt`, `data/audio.mp3`), so run them with
@@ -103,28 +104,18 @@ Alignment loads the model and takes minutes; it is not a fast edit-test loop.
 
 ### Frontend
 
-Vue 3 + Vite + BootstrapVueNext + Pinia, in `frontend/`. Renders each cue as a bamboo slip
-in `writing-mode: vertical-rl`, revealing characters proportionally to audio position and
-scrolling the active slip into view on a `requestAnimationFrame` loop.
-
-`public/align.json` and `public/data` are **symlinks** to `../../align.json` and `../../data`.
-That is the entire coupling between the Python pipeline and the web app — rerun
-`export_align.py` and a browser reload picks up the new alignment. Don't replace those
-symlinks with copies.
+Fresh Vite + React 19 + TypeScript scaffold in `frontend/` (`@vitejs/plugin-react` with the
+React Compiler Babel preset, oxlint, no CSS framework). It's still the template —
+`src/App.tsx` is the starter counter — and it does **not** read `align.json`; the old Vue
+reader and its symlinks (`public/align.json` → `../../align.json`, `public/data` →
+`../../data`) are gone. The whole directory is currently untracked in git.
 
 ```sh
 cd src/text-audio-align/frontend
-pnpm install
-pnpm dev          # http://localhost:5173  (binds 0.0.0.0)
-pnpm build        # type-check + vite build
-pnpm type-check   # vue-tsc
-pnpm lint         # oxlint --fix, then eslint --fix
-pnpm format       # oxfmt src/
-pnpm test:unit    # vitest
+npm install
+npm run dev         # vite, http://localhost:5173
+npm run build       # tsc -b && vite build
+npm run lint        # oxlint
 ```
 
-Run a single test file: `pnpm test:unit --run src/__tests__/App.spec.ts`
-
-**`pnpm test:unit` currently fails.** `src/__tests__/App.spec.ts` is the untouched Vite
-scaffold test asserting the page contains `"You did it!"`; the app renders
-`印经善润华年播放0:00 / 0:00`. Rewrite or delete it — it has never matched this app.
+No tests.
