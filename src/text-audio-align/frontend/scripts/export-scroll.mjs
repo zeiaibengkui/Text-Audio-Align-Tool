@@ -83,7 +83,6 @@ const renderer = new ScrollRenderer(width, height, 1, data, {
   rows,
   font: fontName,
 })
-renderer.detectFilter(ctx)
 const frames = Math.round(duration * fps)
 
 console.log(

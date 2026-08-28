@@ -50,7 +50,6 @@ export function ScrollPlayer({
     const renderer = new ScrollRenderer(W, H, dpr, data)
     const ctx = c.getContext('2d')
     if (ctx) {
-      renderer.detectFilter(ctx)
       renderer.draw(ctx, 0.05) // 首帧：趁进入等待，先落几笔淡墨
     }
     rendererRef.current = renderer

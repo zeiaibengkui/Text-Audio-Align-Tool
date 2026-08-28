@@ -8,7 +8,7 @@
  *  - 纸面上列按书写顺序自左向右排列（layoutChars 第 0 列 = 最早的文字）；
  *  - 正在入墨的字符被钉在屏幕右侧的「笔位」上，纸卷因此在笔位处向左滑出
  *    一整列，先写好的字随之向左滑动、直到换回起点循环；
- *  - 每个字符独立渐入：透明度、缩放、模糊、墨色（从淡墨到浓墨），
+ *  - 每个字符独立渐入：透明度 + 缩放 + 墨色渐变（从淡墨到浓墨），
  *    渐入时刻来自对齐器的逐词时间戳（buildChars 摊平为逐字）。
  */
 
@@ -44,7 +44,6 @@ export interface PlacedChar extends ScriptChar {
 export interface ScrollOptions {
   rows?: number // 每列最大字数
   entrySec?: number // 单个字符的入墨时长
-  blurPx?: number // 入墨时的最大模糊半径
   scaleIn?: number // 入墨起始缩放（相对 1）
   font?: string
   style?: Partial<ScrollStyle>
@@ -119,12 +118,10 @@ export class ScrollRenderer {
   private readonly margin: number
   private readonly penX: number
   private readonly entrySec: number
-  private readonly blurPx: number
   private readonly scaleIn: number
   private readonly chars: PlacedChar[]
   private readonly duration: number
   private readonly totalW: number
-  private supportsFilter = true
 
   constructor(
     width: number,
@@ -143,26 +140,11 @@ export class ScrollRenderer {
     this.colW = Math.round(this.size * 1.14)
     this.penX = width - this.margin - this.colW / 2 // 笔位：屏幕右侧入墨点
     this.entrySec = opts.entrySec ?? 0.5
-    this.blurPx = opts.blurPx ?? 2.5
     this.scaleIn = opts.scaleIn ?? 0.88
     this.font = `${this.size}px ${opts.font ?? FONT_FALLBACK}`
     this.chars = layoutChars(buildChars(data), this.rows)
     this.duration = data.duration
     this.totalW = this.margin * 2 + this.chars.length * this.colW
-    this.supportsFilter = true
-  }
-
-  /** 探测当前 canvas 实现是否支持 ctx.filter 的 blur（不支持的走五笔近似）。 */
-  detectFilter(ctx: CanvasRenderingContext2D): void {
-    const before = ctx.filter
-    try {
-      ctx.filter = 'blur(2px)'
-      const after = ctx.filter
-      ctx.filter = before
-      this.supportsFilter = typeof after === 'string' && after.includes('blur')
-    } catch {
-      this.supportsFilter = false
-    }
   }
 
   /** 纸面横坐标：第 col 列中心（col 递增 = 写在纸面上靠右）。 */
@@ -262,6 +244,7 @@ export class ScrollRenderer {
     ]
   }
 
+  /** 入墨 = 透明度渐显 + 微缩放 + 墨色由淡到浓；不模糊。 */
   private drawInkChar(
     ctx: CanvasRenderingContext2D,
     ch: string,
@@ -271,34 +254,14 @@ export class ScrollRenderer {
   ): void {
     const q = easeOut(p)
     const [r, g, b] = this.inkColor(q)
-    const alpha = 0.12 + 0.88 * q
-    if (this.supportsFilter) {
-      ctx.filter = q < 1 ? `blur(${(this.blurPx * (1 - q)).toFixed(2)}px)` : 'none'
-      ctx.globalAlpha = alpha
-      ctx.fillStyle = `rgb(${r},${g},${b})`
-      const s = 1 - (1 - q) * (1 - this.scaleIn)
-      ctx.save()
-      ctx.translate(x, y)
-      ctx.scale(s, s)
-      ctx.fillText(ch, 0, 0)
-      ctx.restore()
-      ctx.filter = 'none'
-      ctx.globalAlpha = 1
-    } else {
-      // 无 blur 的实现（如部分 Node canvas）：五笔偏移近似
-      const offs = [[-1, -1], [1, -1], [-1, 1], [1, 1], [0, 0]]
-      const s = 1 - (1 - q) * (1 - this.scaleIn) * 0.6
-      ctx.save()
-      ctx.translate(x, y)
-      ctx.scale(s, s)
-      ctx.fillStyle = `rgb(${r},${g},${b})`
-      for (const [dx, dy] of offs) {
-        ctx.globalAlpha = alpha / 5
-        ctx.fillText(ch, dx, dy)
-      }
-      ctx.globalAlpha = 1
-      ctx.restore()
-    }
+    ctx.save()
+    ctx.globalAlpha = 0.12 + 0.88 * q
+    ctx.fillStyle = `rgb(${r},${g},${b})`
+    const s = 1 - (1 - q) * (1 - this.scaleIn)
+    ctx.translate(x, y)
+    ctx.scale(s, s)
+    ctx.fillText(ch, 0, 0)
+    ctx.restore()
   }
 
   private drawChars(
