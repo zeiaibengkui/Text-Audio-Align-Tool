@@ -81,7 +81,7 @@ data/text.txt + data/audio.mp3
         ▼  export_align.py
    align.json  { audio, duration, text, words[], cues[] }
         │
-        └──► frontend/         Vite + React 19 scaffold — reader UI not rebuilt yet
+        └──► frontend/         React workbench on the job server API (see below)
 ```
 
 `align_core.py` run directly (`python align_core.py`) writes `subtitles.srt` and nothing else.
@@ -91,7 +91,7 @@ data/text.txt + data/audio.mp3
 | File | Role |
 | --- | --- |
 | `align_core.py` | Alignment + cue-building core. Import this. |
-| `export_align.py` | Runs the pipeline, writes `align.json` for the frontend. |
+| `export_align.py` | Runs the pipeline, writes `align.json` (feeds the server's seeded sample job; the current UI reads per-job results instead). |
 | `main.py` | Older standalone: aligns in one pass, groups at 15 chars, writes SRT. Superseded by `align_core.py` — no chunking, no punctuation restoration. |
 | `server.py` | Flask job server: upload → async queue → poll → result. `ALIGN_FAKE=1` swaps in `fake_aligner.py`. |
 | `fake_aligner.py` | Model-less Aligner stand-in for dev (`ALIGN_FAKE=1`). Emits fake but shape-identical word timestamps in seconds. |
@@ -111,16 +111,19 @@ enough that `ALIGN_FAKE=1` on the server is the fast edit-test loop.
 
 ### Frontend
 
-Fresh Vite + React 19 + TypeScript scaffold in `frontend/` (`@vitejs/plugin-react` with the
-React Compiler Babel preset, oxlint, no CSS framework). It's still the template —
-`src/App.tsx` is the starter counter — and it does **not** read `align.json`; the old Vue
-reader and its symlinks (`public/align.json` → `../../align.json`, `public/data` →
-`../../data`) are gone. The whole directory is currently untracked in git.
+React 19 + Vite + TypeScript workbench in `frontend/` (`@vitejs/plugin-react` with the
+React Compiler Babel preset, oxlint, no CSS framework). It drives the job server over
+`/api`: pick an audio file, paste the text, submit — the job list polls and shows
+progress — then a completed job opens a cue sheet with an audio player, a time playhead
+sweeping down the lines during playback, and click-to-seek on any cue. In dev, Vite
+proxies `/api` to `127.0.0.1:5000` (`server.proxy` in `vite.config.ts` — change the
+target if the server runs elsewhere). It does not read the static `align.json`; each
+job's own `result.json` is what the UI renders.
 
 ```sh
 cd src/text-audio-align/frontend
 npm install
-npm run dev         # vite, http://localhost:5173
+npm run dev         # http://localhost:5173
 npm run build       # tsc -b && vite build
 npm run lint        # oxlint
 ```

@@ -49,4 +49,4 @@ Alignment outlives HTTP timeouts, so it's job-based: `POST /api/jobs` returns a 
 
 - Python docstrings/comments, error messages, and UI strings are in Chinese — match that.
 - `align_core.py` is the import target; `main.py` is legacy (no chunking, no punctuation restoration) and `asr.py` is a scratch FunASR snippet that hardcodes `device="cuda"` (fails here) and a missing `clip_0001.opus` — neither is safe to rely on.
-- `frontend/` is currently an untouched Vite + React 19 + TS scaffold (React Compiler via Babel preset, oxlint); it does not consume `align.json` yet.
+- `frontend/` (React 19 + Vite + TS, React Compiler via Babel preset, oxlint) is the workbench UI: upload audio + text → POST /api/jobs → poll list → render `result.json` cues with a time playhead. Dev traffic goes through Vite's proxy (`/api` → `127.0.0.1:5000` in `vite.config.ts`), so the Flask app needs no CORS. It does not consume the static `align.json`. No test suite.

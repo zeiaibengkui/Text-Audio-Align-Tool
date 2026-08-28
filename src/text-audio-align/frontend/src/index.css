@@ -1,0 +1,46 @@
+:root {
+  --paper: #f7f3ea;
+  --panel: #fffdf8;
+  --ink: #1e1b16;
+  --ink-2: #6f6557;
+  --ink-3: #a49a8a;
+  --line: #e6dec9;
+  --seal: #a63a25;
+  --seal-deep: #862e1c;
+  --seal-bg: rgba(166, 58, 37, 0.08);
+  --verdi: #2f6e58;
+  --sans: 'Noto Sans CJK SC', 'Source Han Sans SC', 'PingFang SC',
+    'Microsoft YaHei', system-ui, sans-serif;
+  --display: 'FangSong', 'STFangsong', 'AR PL UKai CN', 'Kaiti SC',
+    'Noto Serif CJK SC', serif;
+  --mono: 'Maple Mono NF CN', ui-monospace, 'Cascadia Mono', monospace;
+
+  font: 15px/1.65 var(--sans);
+  color: var(--ink);
+  background: var(--paper);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+:focus-visible {
+  outline: 2px solid var(--seal);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
