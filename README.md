@@ -14,8 +14,9 @@ src/
 ├── fake_aligner.py           # Mock aligner for ALIGN_FAKE=1 (dev loop, no model load)
 ├── data/                     # Sample text.txt + audio.mp3 for the demo
 ├── jobs/                     # Per-job server artifacts (gitignored); sample/ seeded on first start
-└── frontend/                 # React 19 + Vite + TS workbench UI
-    ├── src/                  # App.tsx (upload/polls), ScrollPlayer.tsx, scroll.ts (canvas engine), api.ts
+└── frontend/                 # React 19 + Vite + TS workbench UI (step wizard, react-router)
+    ├── src/                  # routes: / /create /jobs/:id /jobs/:id/render — pages/ + components/,
+    │                         #   scroll.ts (canvas engine shared with export), api.ts, JobsProvider
     └── scripts/export-scroll.mjs   # Headless MP4 export (@napi-rs/canvas + ffmpeg rawpipe)
 ```
 

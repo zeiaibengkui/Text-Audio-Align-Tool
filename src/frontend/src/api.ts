@@ -45,6 +45,10 @@ export function retryJob(id: string): Promise<JobMeta> {
   return request(`/jobs/${id}/retry`, { method: 'POST' })
 }
 
+export function getJob(id: string): Promise<JobMeta> {
+  return request(`/jobs/${id}`)
+}
+
 export function getResult(id: string): Promise<JobResult> {
   return request(`/jobs/${id}/result`)
 }

@@ -58,14 +58,6 @@
   word-break: break-all;
 }
 
-.shell {
-  display: grid;
-  grid-template-columns: 340px minmax(0, 1fr);
-  gap: 14px;
-  align-items: start;
-  flex: 1;
-}
-
 .panel {
   background: var(--panel);
   border: 1px solid var(--line);
@@ -158,6 +150,132 @@
   color: var(--seal-deep);
 }
 
+.page-narrow {
+  max-width: 720px;
+}
+
+.back-link {
+  margin: 12px 2px 0;
+  font-size: 13px;
+}
+
+
+
+.panel-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.panel-title-row .panel-title {
+  margin: 0;
+}
+
+a.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  width: fit-content;
+}
+
+.stepper {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.step {
+  display: flex;
+  align-items: center;
+}
+
+.step-link,
+.step-link-disabled {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+  color: var(--ink-3);
+}
+
+.step-link:hover .step-label {
+  color: var(--ink);
+}
+
+.step-num {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font: 11px/1 var(--mono);
+  border: 1px solid var(--line);
+  color: var(--ink-3);
+}
+
+.step-label {
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  color: var(--ink-3);
+}
+
+.step-sep {
+  flex: 1;
+  min-width: 28px;
+  height: 1px;
+  background: var(--line);
+}
+
+.step-sep.on {
+  background: var(--seal);
+}
+
+.step-active .step-num {
+  background: var(--seal);
+  border-color: var(--seal);
+  color: var(--panel);
+}
+
+.step-active .step-label {
+  color: var(--ink);
+}
+
+.step-done .step-num {
+  color: var(--seal);
+  border-color: rgba(166, 58, 37, 0.6);
+}
+
+.step-done .step-label {
+  color: var(--ink-2);
+}
+
+.step-disabled .step-label {
+  opacity: 0.55;
+}
+
+.result-progress {
+  max-width: 320px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.result-progress .progress {
+  display: block;
+  margin: 4px 0;
+}
+
+.topbar h1 .home-link {
+  color: inherit;
+  text-decoration: none;
+}
+
 .jobs {
   min-height: 120px;
 }
@@ -221,6 +339,11 @@
 .badge-failed {
   color: var(--seal-deep);
   border-color: rgba(166, 58, 37, 0.6);
+}
+
+.badge-cancelled {
+  color: var(--ink-3);
+  border-color: var(--line);
 }
 
 @keyframes pulse {
@@ -494,10 +617,6 @@
 }
 
 @media (max-width: 860px) {
-  .shell {
-    grid-template-columns: 1fr;
-  }
-
   .cues {
     max-height: 44vh;
   }
