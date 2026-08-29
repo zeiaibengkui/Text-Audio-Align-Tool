@@ -368,7 +368,7 @@ class ExportManager:
         existing = self.get(job_id)
         if existing and existing.get("status") in ("queued", "rendering", "done"):
             return existing
-        self._update(job_id, status="queued", progress=0.0)
+        self._update(job_id, status="queued", progress=0.0, error=None, finished_at=None)
         threading.Thread(target=self._run, args=(meta,), daemon=True).start()
         return self.get(job_id)
 
@@ -392,7 +392,7 @@ class ExportManager:
             self._update(job_id, status="failed", error="找不到 node（导出需要它）", finished_at=_now())
             return
 
-        self._update(job_id, status="rendering", progress=0.0)
+        self._update(job_id, status="rendering", progress=0.0, error=None, finished_at=None)
         cmd = [node, str(script), "--json", str(result), "--audio", str(audio), "--out", str(out)]
         cover_ext = meta.get("cover_ext")
         if cover_ext:
@@ -416,7 +416,9 @@ class ExportManager:
                 if not chunk:
                     break
                 buf = (buf + chunk)[-256:]
-                tail = re.findall(rb"(\d+)%", buf)
+                # 只认脚本写的 \rNN%；否则 ffmpeg 的 "muxing overhead: 60.34%"
+                # 会被抓进来变成离谱进度
+                tail = re.findall(rb"\r(\d+)%", buf)
                 if tail:
                     progress = max(progress, int(tail[-1]) / 100)
                     self._update(job_id, progress=round(progress, 4))

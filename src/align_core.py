@@ -11,6 +11,7 @@
 import math
 import os
 import subprocess
+import tempfile
 import threading
 from pathlib import Path
 
@@ -181,6 +182,28 @@ def split_text_by_weight(text, k):
     return chunks
 
 
+def _load_audio_auto(path):
+    """按原格式尝试解码；失败（如 m4a/opus，libsndfile 不支持）再用
+    ffmpeg 转成 16kHz 单声道 wav 重试。"""
+    try:
+        return load_audio(path)
+    except Exception as e:
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+            try:
+                subprocess.run(
+                    ["ffmpeg", "-y", "-i", str(path), "-ar", "16000", "-ac", "1",
+                     "-f", "wav", tmp.name],
+                    check=True, capture_output=True,
+                )
+                return load_audio(tmp.name)
+            except Exception:
+                raise RuntimeError(
+                    f"无法解码音频文件 {path.name}（libsndfile 与 ffmpeg 均失败）：{e}"
+                ) from e
+            finally:
+                os.unlink(tmp.name)
+
+
 def align_chunked(aligner, text, audio, dur, target_sec=130.0, progress_cb=None):
     """把整段音频按时间切成若干段，逐段对齐，绕开模型对超长音频的限制。
 
@@ -193,7 +216,7 @@ def align_chunked(aligner, text, audio, dur, target_sec=130.0, progress_cb=None)
     """
     k = max(3, math.ceil(dur / target_sec))
     chunks = split_text_by_weight(text, k)
-    decoded = load_audio(_resolve(audio) if isinstance(audio, (str, Path)) else audio)
+    decoded = _load_audio_auto(_resolve(audio) if isinstance(audio, (str, Path)) else audio)
 
     words = []
     for i, c in enumerate(chunks):
