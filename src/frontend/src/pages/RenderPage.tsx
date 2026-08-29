@@ -1,32 +1,13 @@
-import { useEffect, useState } from 'react'
 import { Navigate, useParams } from 'react-router'
-import { getResult, jobAudioUrl, jobCoverUrl } from '../api'
+import { jobAudioUrl, jobCoverUrl } from '../api'
 import { ResultView } from '../components/ResultView'
-import type { JobResult } from '../types'
 import { useJob } from '../useJob'
+import { useResult } from '../useResult'
 
 export default function RenderPage() {
   const { id } = useParams()
   const { job, error } = useJob(id ?? '', 0)
-  const [resultFor, setResultFor] = useState<string | null>(null)
-  const [result, setResult] = useState<JobResult | null>(null)
-  const [resultError, setResultError] = useState(false)
-  const [attempt, setAttempt] = useState(0)
-
-  useEffect(() => {
-    if (!id || !job || job.status !== 'done') return
-    let live = true
-    getResult(id)
-      .then((d) => {
-        if (!live) return
-        setResultFor(id)
-        setResult(d)
-      })
-      .catch(() => live && setResultError(true))
-    return () => {
-      live = false
-    }
-  }, [id, job, attempt])
+  const { ready, result, failed, reload } = useResult(id ?? '', job?.status === 'done')
 
   if (!id) return <Navigate to="/" replace />
   if (error || (job && job.status !== 'done')) {
@@ -41,13 +22,13 @@ export default function RenderPage() {
       </section>
     )
   }
-  if (resultFor === id && resultError) {
+  if (failed && !ready) {
     return (
       <section className="panel result">
         <div className="result-empty">
           <p>结果加载失败，请刷新重试。</p>
           <p className="result-sub">
-            <button className="btn" onClick={() => setAttempt((n) => n + 1)}>
+            <button className="btn" onClick={reload}>
               重新加载
             </button>
           </p>
@@ -55,7 +36,7 @@ export default function RenderPage() {
       </section>
     )
   }
-  if (resultFor !== id || !result) {
+  if (!ready || !result) {
     return (
       <section className="panel result">
         <div className="result-empty">
@@ -68,6 +49,7 @@ export default function RenderPage() {
     <section className="panel result" aria-live="polite">
       <ResultView
         key={id}
+        view="scroll"
         result={result}
         jobId={id}
         audioUrl={jobAudioUrl(id)}

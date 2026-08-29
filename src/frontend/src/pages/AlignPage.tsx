@@ -1,9 +1,12 @@
 import { useState } from 'react'
 import { Link, Navigate, useParams } from 'react-router'
-import { STAGE_LABEL, fmtTime } from '../format'
+import { jobAudioUrl } from '../api'
+import { ResultView } from '../components/ResultView'
+import { STAGE_LABEL } from '../format'
 import { useJobs } from '../jobs-context'
 import { ACTIVE_STATUSES } from '../types'
 import { useJob } from '../useJob'
+import { useResult } from '../useResult'
 
 const MISSING = '任务不存在'
 
@@ -11,6 +14,10 @@ export default function AlignPage() {
   const { id } = useParams()
   const { retryJob } = useJobs()
   const { job, error, reload } = useJob(id ?? '', 2000)
+  const { ready, result, failed, reload: reloadResult } = useResult(
+    id ?? '',
+    job?.status === 'done',
+  )
   const [retryError, setRetryError] = useState('')
 
   if (!id) return <Navigate to="/" replace />
@@ -68,17 +75,35 @@ export default function AlignPage() {
           </div>
         </>
       ) : job.status === 'done' ? (
-        <div className="result-empty">
-          <p>{STAGE_LABEL.done}</p>
-          <p className="result-sub">
-            {fmtTime(job.duration)} · {job.word_count} 词 · {job.cue_count} 条
-          </p>
-          <p className="result-sub">
-            <Link className="btn" to={`/jobs/${id}/render`}>
-              下一步：渲染
-            </Link>
-          </p>
-        </div>
+        failed && !ready ? (
+          <div className="result-empty">
+            <p>结果加载失败，请刷新重试。</p>
+            <p className="result-sub">
+              <button className="btn" onClick={reloadResult}>
+                重新加载
+              </button>
+            </p>
+          </div>
+        ) : !ready || !result ? (
+          <div className="result-empty">
+            <p>加载中…</p>
+          </div>
+        ) : (
+          <>
+            <ResultView
+              view="cues"
+              result={result}
+              jobId={id}
+              audioUrl={jobAudioUrl(id)}
+              coverUrl={null}
+            />
+            <p className="result-sub">
+              <Link className="btn" to={`/jobs/${id}/render`}>
+                下一步：渲染
+              </Link>
+            </p>
+          </>
+        )
       ) : (
         <div className="result-empty">
           <p className="form-error">{job.error ?? STAGE_LABEL[job.status]}</p>
