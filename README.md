@@ -32,5 +32,19 @@ ALIGN_FAKE=1 .venv/bin/python src/server.py    # fake aligner, seconds — the d
 cd src/frontend && pnpm i && pnpm run dev
 ```
 
+## Roadmap
+
+### 支付：扫码即用（无账号）
+
+目标：不建用户体系，扫微信二维码支付后直接解锁功能。
+
+- **接入方式**：微信支付 **Native 扫码支付**（服务端统一下单 → `code_url` → 前端生成二维码 → 用户支付 → 微信回调 `notify_url` 验签置 paid → 前端轮询订单状态）。
+- **资质**：需要微信商户号（个体户或企业营业执照）。无资质阶段可先用第三方代收（虎皮椒/彩虹易支付，2–3% 费率）或收款码+人工核对过渡，长期建议办执照走官方（0.6%）。
+- **无账号权益发放**：支付完成后服务端签发长期 token（JWT）存 localStorage；页面显示激活码兜底（换设备/清缓存时手动输入激活）。
+- **订单存储**：`orders.json` + 内存字典，形态与现有 `JobManager` 一致。
+- **首批可解锁项**：自选字体（楷体/仿宋/毛笔等，`scroll.ts` 与 `export-scroll.mjs` 同步 `GlobalFonts.register`）、去水印/高清导出、长音频。
+- **前端挂载点**：新增 `LicenseProvider`（context，与 `JobsProvider` 并列）；RenderPage 的解锁项入口可见，点击弹扫码层。
+
+
 ## Preview
 ![preview](docs/Screenshot_20260829_113742.png)

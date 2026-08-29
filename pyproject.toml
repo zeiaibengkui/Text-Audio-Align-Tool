@@ -1,5 +1,5 @@
 [project]
-name = "learnai"
+name = "text-audio-align"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
@@ -15,8 +15,6 @@ dependencies = [
     "torchvision>=0.28.0",
 ]
 
-[project.scripts]
-learnai = "learnai:main"
 
 [build-system]
 requires = ["uv_build>=0.12.5,<0.13.0"]
