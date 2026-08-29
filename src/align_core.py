@@ -18,8 +18,8 @@ from qwen_aligner_toolkit import Aligner
 from qwen_aligner_toolkit.audio import load_audio
 
 # 这两个相对路径是导出契约的一部分：export_align.py 会把 AUDIO_FILE 原样写进
-# align.json，供 subtitles.html 当相对 URL 用。所以字面值保持不变，只在真正
-# 读文件时才解析成绝对路径。
+# align.json（server.py 会把它改写为 /api/jobs/<id>/audio）。所以字面值保持
+# 不变，只在真正读文件时才解析成绝对路径。
 TEXT_FILE = "./data/text.txt"
 AUDIO_FILE = "data/audio.mp3"
 

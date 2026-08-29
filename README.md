@@ -12,8 +12,6 @@ src/
 ├── export_align.py           # CLI: run align_core and export align.json for the frontend
 ├── server.py                 # Flask job server (job-based, since alignment outlives HTTP timeouts)
 ├── fake_aligner.py           # Mock aligner for ALIGN_FAKE=1 (dev loop, no model load)
-├── main.py                   # Legacy aligner — no chunking, no punctuation restoration
-├── asr.py                    # Scratch FunASR snippet (hardcoded cuda) — do not rely on
 ├── data/                     # Sample text.txt + audio.mp3 for the demo
 ├── jobs/                     # Per-job server artifacts (gitignored); sample/ seeded on first start
 └── frontend/                 # React 19 + Vite + TS workbench UI

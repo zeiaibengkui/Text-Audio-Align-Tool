@@ -29,3 +29,4 @@ src/jobs/
 # NB: "data/*" would only match a top-level /data — patterns with an interior
 # slash are anchored to this file's directory.
 /src/data/
+/src/jobs
