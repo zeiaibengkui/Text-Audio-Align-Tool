@@ -14,6 +14,9 @@
  * --segs 是分段数上限（默认 8，实际取 min(8, CPU 核数, 每段≥1200 帧)）；
  * 进度以 \rNN% 输出在 stdout，服务端按 \r(\d+)% 解析，契约不变。
  *
+ * 封面：第 20s（不足时长则取末帧）的画面作为片头 1s 定格，mp4 由此自带
+ * 封面（第一帧）；音频延迟 1s 衔接，总时长 = 音频 + 1s。
+ *
  * 依赖：@napi-rs/canvas（pnpm add -D @napi-rs/canvas）、ffmpeg 在 PATH。
  */
 
@@ -126,7 +129,7 @@ async function renderRange() {
       '-f', 'rawvideo', '-pix_fmt', 'rgba', '-s', `${width}x${height}`,
       '-r', String(fps),
       '-i', '-',
-      '-c:v', 'libx264', '-crf', '20', '-preset', 'medium',
+      '-c:v', 'libx264', '-crf', '22', '-preset', 'slow',
       '-pix_fmt', 'yuv420p',
       '-an', segFile,
     ],
@@ -239,14 +242,47 @@ if (bad >= 0) {
 process.stdout.write('\n')
 console.log(`视频帧完成（${((Date.now() - t0) / 1000).toFixed(1)}s · ${segs} 段并发）`)
 
+// ---------- 封面帧前置：mp4 容器没有视频封面字段（那是音频的 album art），
+// 直接把第 20s 的画面做成 1s 定格放在片头——文件管理器/播放器预览取的就是
+// 第一帧，封面即内嵌在视频里。后续内容照常衔接，音频延迟 1s 对齐。 ----------
+const posterSec = Math.max(0, Math.min(20, duration - 0.05))
+let coverPre = null
+if (duration > 0.2) {
+  // 帧由渲染器直接画（与导出/播放逐帧一致，不用回头从 mp4 抽）
+  renderer.draw(ctx, posterSec)
+  const pngPath = `${outPath}.poster.png`
+  const mp4Path = `${outPath}.poster.mp4`
+  writeFileSync(pngPath, canvas.toBuffer('image/png'))
+  const pp = spawn(
+    'ffmpeg',
+    [
+      '-y', '-loop', '1', '-framerate', String(fps), '-t', '1',
+      '-i', pngPath,
+      '-c:v', 'libx264', '-crf', '22', '-preset', 'slow', '-pix_fmt', 'yuv420p',
+      '-an', mp4Path,
+    ],
+    { stdio: 'inherit' },
+  )
+  const rc = await new Promise((ok) => pp.on('close', ok))
+  rmSync(pngPath, { force: true })
+  if (rc !== 0) {
+    console.error('封面帧生成失败，导出中止')
+    cleanSegs()
+    process.exit(1)
+  }
+  coverPre = mp4Path
+  segFiles.unshift(coverPre)
+  console.log(`封面帧 t=${posterSec.toFixed(2)}s → 片头 1s 定格`)
+}
+
 // ---------- concat 段视频 + 混入音频 → 最终 mp4 ----------
 const listPath = `${outPath}.seg.list`
 writeFileSync(listPath, segFiles.map((f) => `file '${f}'`).join('\n') + '\n')
 const finalArgs = ['-y']
-if (!noAudio) finalArgs.push('-i', audioPath)
+if (!noAudio) finalArgs.push('-itsoffset', coverPre ? '1' : '0', '-i', audioPath)
 finalArgs.push('-f', 'concat', '-safe', '0', '-i', listPath)
 if (!noAudio) {
-  finalArgs.push('-map', '1:v', '-map', '0:a', '-c:v', 'copy', '-c:a', 'aac', '-shortest')
+  finalArgs.push('-map', '1:v', '-map', '0:a', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '96k', '-shortest')
 } else {
   finalArgs.push('-map', '0:v', '-c', 'copy')
 }
