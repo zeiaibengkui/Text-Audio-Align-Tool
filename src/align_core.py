@@ -39,7 +39,7 @@ def _load_dotenv():
     if _dotenv_loaded:
         return
     _dotenv_loaded = True
-    env_file = _BASE.parents[1] / ".env"
+    env_file = _BASE.parents[0] / ".env"
     try:
         with open(env_file, encoding="utf-8") as f:
             for line in f:

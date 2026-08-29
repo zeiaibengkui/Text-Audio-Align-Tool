@@ -16,7 +16,7 @@ wheels/
 *.srt
 
 # Uploaded audio + alignment results from the job server
-src/text-audio-align/jobs/
+src/jobs/
 
 # Machine-specific defaults (.env): ALIGN_DEVICE, PORT, ...
 # Add this file with `git add -f .env` if the default should travel with the repo.

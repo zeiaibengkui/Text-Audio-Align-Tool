@@ -4,9 +4,9 @@
 任务 id，客户端轮询状态，完成后再取结果。任务落盘保存，重启后仍在。
 
 运行：
-    cd src/text-audio-align
-    ../../.venv/bin/python server.py          # 真实对齐
-    ALIGN_FAKE=1 ../../.venv/bin/python server.py   # 假对齐，秒级跑通全链路
+    cd src
+    ../.venv/bin/python server.py          # 真实对齐
+    ALIGN_FAKE=1 ../.venv/bin/python server.py   # 假对齐，秒级跑通全链路
 
 环境变量：
     ALIGN_FAKE=1     使用 fake_aligner，不加载模型
