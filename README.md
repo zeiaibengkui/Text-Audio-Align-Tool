@@ -1,4 +1,4 @@
-# Text Audio Align Tool
+   # Text Audio Align Tool
 
 This is a tool for aligning text and audio, with an ancient Chinese style rendering function, and a beautiful style.  
 
@@ -31,3 +31,6 @@ ALIGN_FAKE=1 .venv/bin/python src/server.py    # fake aligner, seconds — the d
 # frontend react — use pnpm (npm is broken with EBADDEVENGINES). Port 5173.
 cd src/frontend && pnpm i && pnpm run dev
 ```
+
+## Preview
+![preview](docs/Screenshot_20260829_113012.png)
