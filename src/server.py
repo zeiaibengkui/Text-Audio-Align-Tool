@@ -362,13 +362,19 @@ class ExportManager:
             state.update(fields)
             return dict(state)
 
-    def ensure(self, meta):
-        """幂等启动：进行中/已完成时返回现有状态，否则开线程渲染。"""
+    def ensure(self, meta, force=False):
+        """幂等启动：进行中直接返回现有状态；已完成且非 force 返回状态；
+        否则开线程渲染（force 用于「重新导出」，重写成现有 scroll.mp4）。"""
         job_id = meta["id"]
         existing = self.get(job_id)
-        if existing and existing.get("status") in ("queued", "rendering", "done"):
+        if existing and existing.get("status") in ("queued", "rendering"):
             return existing
-        self._update(job_id, status="queued", progress=0.0, error=None, finished_at=None)
+        if existing and existing.get("status") == "done" and not force:
+            return existing
+        self._update(
+            job_id, status="queued", progress=0.0,
+            error=None, finished_at=None, elapsed_sec=None,
+        )
         threading.Thread(target=self._run, args=(meta,), daemon=True).start()
         return self.get(job_id)
 
@@ -393,6 +399,7 @@ class ExportManager:
             return
 
         self._update(job_id, status="rendering", progress=0.0, error=None, finished_at=None)
+        t_start = time.time()
         cmd = [node, str(script), "--json", str(result), "--audio", str(audio), "--out", str(out)]
         cover_ext = meta.get("cover_ext")
         if cover_ext:
@@ -427,7 +434,10 @@ class ExportManager:
         rc = proc.wait()
 
         if rc == 0 and out.exists():
-            self._update(job_id, status="done", progress=1.0, finished_at=_now())
+            self._update(
+                job_id, status="done", progress=1.0, finished_at=_now(),
+                elapsed_sec=round(time.time() - t_start, 1),
+            )
         else:
             tail = buf.decode("utf-8", "replace")[-400:]
             self._update(
@@ -602,7 +612,8 @@ def create_app(jobs_dir=JOBS_DIR, seed=True):
             return jsonify(error="任务不存在"), 404
         if meta["status"] != "done":
             return jsonify(error="任务尚未完成", status=meta["status"]), 409
-        state = exports.ensure(meta)
+        force = request.args.get("force") == "1"
+        state = exports.ensure(meta, force=force)
         return jsonify(state), (200 if state["status"] == "done" else 202)
 
     @app.get("/api/jobs/<job_id>/export")

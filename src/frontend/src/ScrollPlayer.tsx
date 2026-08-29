@@ -89,11 +89,26 @@ export function ScrollPlayer({
     return () => cancelAnimationFrame(raf)
   }, [])
 
-  // ---- 导出：进入视图先查一次状态；渲染中每 1.5s 轮询 ----
+  const fmtElapsed = (sec: number): string => {
+    const m = Math.floor(sec / 60)
+    const r = Math.round(sec % 60)
+    return m > 0 ? `${m}分${String(r).padStart(2, '0')}秒` : `${r}秒`
+  }
+
+  // ---- 导出：进入视图先查一次状态；从未导出过则自动开始渲染（服务端
+  // 重启后内存状态丢失、或任务刚完成时都会走到这里）----
   useEffect(() => {
     let live = true
     getExport(jobId)
-      .then((s) => live && setExportState(s))
+      .then((s) => {
+        if (!live) return
+        setExportState(s)
+        if (s.status === 'none') {
+          startExport(jobId)
+            .then((s2) => live && setExportState(s2))
+            .catch(() => {})
+        }
+      })
       .catch(() => {})
     return () => {
       live = false
@@ -114,10 +129,10 @@ export function ScrollPlayer({
     return () => clearInterval(id)
   }, [exporting, jobId])
 
-  const onExport = async () => {
+  const onExport = async (force = false) => {
     setExportError(null)
     try {
-      setExportState(await startExport(jobId))
+      setExportState(await startExport(jobId, force))
     } catch (err) {
       setExportError(err instanceof Error ? err.message : '导出请求失败')
     }
@@ -154,9 +169,19 @@ export function ScrollPlayer({
           </button>
         )}
         {exportState?.status === 'done' && (
-          <a className="btn export-btn" href={exportVideoUrl(jobId)} download>
-            下载视频
-          </a>
+          <>
+            <a className="btn export-btn" href={exportVideoUrl(jobId)} download>
+              下载视频
+            </a>
+            <button className="btn export-btn" onClick={() => void onExport(true)}>
+              重新导出
+            </button>
+            {exportState.elapsed_sec != null && (
+              <em className="export-elapsed">
+                耗时 {fmtElapsed(exportState.elapsed_sec)}
+              </em>
+            )}
+          </>
         )}
         {exportState?.status === 'failed' && (
           <span className="export-fail">

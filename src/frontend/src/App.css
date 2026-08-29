@@ -471,6 +471,12 @@ a.btn {
   width: fit-content;
 }
 
+.export-elapsed {
+  font-style: normal;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
 .export-fail {
   display: flex;
   align-items: center;

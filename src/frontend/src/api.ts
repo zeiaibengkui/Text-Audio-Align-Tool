@@ -61,10 +61,12 @@ export interface ExportState {
   status: 'none' | 'queued' | 'rendering' | 'done' | 'failed'
   progress?: number | null
   error?: string | null
+  /** 本次渲染耗时（秒），done 时由服务端写入 */
+  elapsed_sec?: number | null
 }
 
-export function startExport(id: string): Promise<ExportState> {
-  return request(`/jobs/${id}/export`, { method: 'POST' })
+export function startExport(id: string, force = false): Promise<ExportState> {
+  return request(`/jobs/${id}/export${force ? '?force=1' : ''}`, { method: 'POST' })
 }
 
 export function getExport(id: string): Promise<ExportState> {
