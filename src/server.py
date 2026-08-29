@@ -333,6 +333,10 @@ def get_aligner():
     return align_core.get_aligner(os.environ.get("ALIGN_DEVICE"))
 
 
+class ExportTooSoon(Exception):
+    """force 重渲冷却未过：脚本循环刷接口也压不垮整机。"""
+
+
 class ExportManager:
     """竹简卷轴 → MP4 导出。
 
@@ -342,14 +346,20 @@ class ExportManager:
     jobs/<id>/scroll.mp4。状态只存在于内存（瞬态），上一轮进程带走的渲染
     不可能续上，重启后再点一次就是。
 
-    渲染满时长视频是分钟级的（约 1.4× 实时），所以这里只允许每个任务
-    同时跑一个导出：已在排队/进行中时 POST 直接返回当前状态。
+    渲染满时长视频是分钟级的（约 1.4× 实时），所以每个任务同时只能跑一个
+    导出（可重入状态在锁内原子认领，并发 force 不会开出第二个线程），
+    全局最多 max_concurrent 个导出并发渲染（BoundedSemaphore 兜底），
+    且 force 重渲有 reexport_cooldown 秒冷却——这个端点无鉴权且绑定
+    0.0.0.0，脚本循环只能在冷却间隔内敲门。
     """
 
-    def __init__(self, jobs_dir=JOBS_DIR):
+    def __init__(self, jobs_dir=JOBS_DIR, max_concurrent=2, reexport_cooldown=60):
         self.jobs_dir = Path(jobs_dir)
         self._exports = {}
         self._lock = threading.Lock()
+        self._render_slots = threading.BoundedSemaphore(max_concurrent)
+        self._reexport_cooldown = reexport_cooldown
+        self._force_times = {}
 
     def get(self, job_id):
         with self._lock:
@@ -364,19 +374,31 @@ class ExportManager:
 
     def ensure(self, meta, force=False):
         """幂等启动：进行中直接返回现有状态；已完成且非 force 返回状态；
-        否则开线程渲染（force 用于「重新导出」，重写成现有 scroll.mp4）。"""
+        否则开线程渲染（force 用于「重新导出」，重写成现有 scroll.mp4）。
+        查询与认领都在锁内原子完成，并发 force 不会开出第二个渲染线程；
+        force 另有 reexport_cooldown 秒冷却（按最近一次被接受的 force 记时，
+        首次重渲不受影响），后续循环刷接口只能隔 60 秒敲一次门。"""
         job_id = meta["id"]
-        existing = self.get(job_id)
-        if existing and existing.get("status") in ("queued", "rendering"):
-            return existing
-        if existing and existing.get("status") == "done" and not force:
-            return existing
-        self._update(
-            job_id, status="queued", progress=0.0,
-            error=None, finished_at=None, elapsed_sec=None,
-        )
+        with self._lock:
+            existing = self._exports.get(job_id)
+            if existing and existing.get("status") in ("queued", "rendering"):
+                return dict(existing)
+            if existing and existing.get("status") == "done" and not force:
+                return dict(existing)
+            if force:
+                last = self._force_times.get(job_id, 0)
+                if time.time() - last < self._reexport_cooldown:
+                    wait = int(self._reexport_cooldown - (time.time() - last)) + 1
+                    raise ExportTooSoon(f"重新导出太频繁，{wait} 秒后再试")
+                self._force_times[job_id] = time.time()
+            state = self._exports.setdefault(job_id, {"job_id": job_id})
+            state.update(
+                status="queued", progress=0.0,
+                error=None, finished_at=None, elapsed_sec=None,
+            )
+            snapshot = dict(state)
         threading.Thread(target=self._run, args=(meta,), daemon=True).start()
-        return self.get(job_id)
+        return snapshot
 
     def _run(self, meta):
         job_id = meta["id"]
@@ -397,6 +419,20 @@ class ExportManager:
         if node is None:
             self._update(job_id, status="failed", error="找不到 node（导出需要它）", finished_at=_now())
             return
+
+        # 全局并发限制：最多 max_concurrent 个渲染同时跑，其余线程在此排队
+        # （状态维持 ensure 里写的 queued，前端显示「排队中」）。
+        with self._render_slots:
+            self._render(meta)
+
+    def _render(self, meta):
+        job_id = meta["id"]
+        script = BASE_DIR / "frontend" / "scripts" / "export-scroll.mjs"
+        job_dir = self.jobs_dir / job_id
+        result = job_dir / "result.json"
+        audio = job_dir / f"audio{meta['audio_ext']}"
+        out = job_dir / "scroll.mp4"
+        node = shutil.which("node")
 
         self._update(job_id, status="rendering", progress=0.0, error=None, finished_at=None)
         t_start = time.time()
@@ -613,7 +649,10 @@ def create_app(jobs_dir=JOBS_DIR, seed=True):
         if meta["status"] != "done":
             return jsonify(error="任务尚未完成", status=meta["status"]), 409
         force = request.args.get("force") == "1"
-        state = exports.ensure(meta, force=force)
+        try:
+            state = exports.ensure(meta, force=force)
+        except ExportTooSoon as exc:
+            return jsonify(error=str(exc)), 429
         return jsonify(state), (200 if state["status"] == "done" else 202)
 
     @app.get("/api/jobs/<job_id>/export")
