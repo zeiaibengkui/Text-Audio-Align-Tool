@@ -282,24 +282,21 @@ export class ScrollRenderer {
     ctx.fillRect(0, 0, W, H)
 
     const cycle = this.duration > 0 ? Math.min(time, this.duration - 0.001) % this.duration : 0
-    // 循环回卷头时纸面快速淡入，提示「重新开卷」
-    const wrapA = Math.min(1, cycle / 0.35)
 
     // 笔位固定在当前列：写一列时纸面不动；该列头字入墨期间整卷左滑一格，
     // 于是前一列流向左、新列缓缓滑到笔位下。先写的字一路向左循环。
+    // 动头前（k<0）：纸卷停在首列前一列——首字入墨与其他任何列头字
+    // 一样从笔位左一列滑入，且画面一开始就露出书尾压杆 + 封面 + 首列。
     const { k, pk } = this.frontier(cycle)
-    const baseCol = k < 0 ? -1 : this.chars[k].col
+    const baseCol = k < 0 ? 0 : this.chars[k].col
     const lead = k < 0 ? 0 : this.chars[k].row === 0 ? pk : 1
     const shift =
       this.chars.length === 0
         ? -(W - this.totalW) / 2
         : this.contentX(baseCol - 1 + lead) - this.penX
 
-    ctx.save()
-    ctx.globalAlpha = ctx.globalAlpha * wrapA
     this.drawBand(ctx, shift)
     this.drawChars(ctx, cycle, shift)
-    ctx.restore()
   }
 
   private drawBand(ctx: CanvasRenderingContext2D, shift: number): void {

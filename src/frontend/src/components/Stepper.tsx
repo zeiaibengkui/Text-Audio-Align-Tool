@@ -10,11 +10,12 @@ interface Step {
 export function Stepper() {
   const { jobs } = useJobs()
   const path = useLocation().pathname
-  const m = path.match(/^\/jobs\/([^/]+)(?:\/render)?$/)
-  const routeJobId = m ? m[1] : null
+  const m = path.includes('/jobs/')
+  const m2 = path.includes('/render')
+  const routeJobId = m ? path.split('/jobs/')[1]?.split('/')[0] : null
   const currentJobId = routeJobId ?? jobs[0]?.id ?? null
   const currentJob = currentJobId ? jobs.find((j) => j.id === currentJobId) : null
-  const activeIdx = path === '/' ? 0 : path === '/create' ? 1 : m ? (m[2] ? 3 : 2) : -1
+  const activeIdx = path === '/' ? 0 : path === '/create' ? 1 : m ? (m2 ? 3 : 2) : -1
 
   const steps: Step[] = [
     { label: '任务列表', to: '/' },

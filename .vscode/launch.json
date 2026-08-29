@@ -2,12 +2,20 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "name": "Launch Chrome",
+      "request": "launch",
+      "type": "chrome",
+      "url": "http://localhost:5173",
+      "webRoot": "${workspaceFolder}"
+    },
+    {
       "type": "firefox",
       "request": "launch",
-      "name": "调试前端（Firefox）",
+      "reAttach": true,
+      "name": "Launch localhost",
       "url": "http://localhost:5173",
-      "webRoot": "${workspaceFolder}/src/frontend",
-      "profileDir": "${workspaceFolder}/.vscode/firefox-profile"
+      "webRoot": "${workspaceFolder}"
     }
-  ]
+  ],
+  "compounds": []
 }
