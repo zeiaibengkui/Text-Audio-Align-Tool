@@ -33,4 +33,4 @@ cd src/frontend && pnpm i && pnpm run dev
 ```
 
 ## Preview
-![preview](docs/Screenshot_20260829_113012.png)
+![preview](docs/Screenshot_20260829_113742.png)
