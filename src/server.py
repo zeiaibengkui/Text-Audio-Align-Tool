@@ -52,6 +52,15 @@ def _now():
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+def _transcode_align_wav(audio_path, out_wav):
+    """把任意 ffmpeg 可读的音频统一转成对齐用的 16kHz 单声道 wav。"""
+    subprocess.run(
+        ["ffmpeg", "-y", "-v", "error", "-i", str(audio_path),
+         "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", str(out_wav)],
+        check=True, capture_output=True,
+    )
+
+
 class JobManager:
     """任务存储 + 单线程工作队列。
 
@@ -130,10 +139,20 @@ class JobManager:
         job_dir = self.jobs_dir / job_id
         job_dir.mkdir(parents=True)
 
-        audio_file.save(job_dir / f"audio{ext}")
+        audio_path = job_dir / f"audio{ext}"
+        audio_file.save(audio_path)
         (job_dir / "text.txt").write_text(text, encoding="utf-8")
         if cover_file is not None:
             cover_file.save(job_dir / f"cover{cover_ext}")
+        # 上传即转码：坏文件在创建任务的当刻报错（400），而不是等对齐跑到一半；
+        # 顺便把 m4a/opus 这些 libsndfile 读不了的格式一次转好。
+        try:
+            self._ensure_align_wav(job_dir, audio_path)
+        except Exception as exc:
+            shutil.rmtree(job_dir, ignore_errors=True)
+            stderr = (getattr(exc, "stderr", b"") or b"").decode("utf-8", "replace").strip()
+            detail = stderr[-200:] or str(exc)[-200:]
+            raise ValueError(f"音频无法解析，请换一个文件（{detail}）") from exc
 
         meta = {
             "id": job_id,
@@ -156,6 +175,16 @@ class JobManager:
         self._write_meta(snapshot)
         self._queue.put(job_id)
         return snapshot
+
+    def _ensure_align_wav(self, job_dir, audio_path):
+        """任务的对齐输入 jobs/<id>/align.wav（16kHz 单声道），存在即复用。
+
+        上传时已转；旧任务（上传时没有这步）首次对齐时按需补转一次。
+        """
+        wav = job_dir / "align.wav"
+        if not wav.exists():
+            _transcode_align_wav(audio_path, wav)
+        return wav
 
     def retry(self, job_id):
         """重试失败（或已取消但分片还在）的任务：复位状态、排队重跑。
@@ -274,7 +303,7 @@ class JobManager:
             text, words, cues, dur = align_core.load_data(
                 aligner=aligner,
                 text_file=text_path,
-                audio_file=audio_path,
+                audio_file=self._ensure_align_wav(job_dir, audio_path),
                 progress_cb=progress_cb,
             )
 
@@ -577,7 +606,10 @@ def create_app(jobs_dir=JOBS_DIR, seed=True):
                 return jsonify(error=f"不支持的封面格式 {cover_ext or '(无扩展名)'}，支持：{allowed}"), 400
 
         display_name = secure_filename(audio.filename) or f"audio{ext}"
-        meta = manager.create(audio, ext, text, display_name, cover, cover_ext)
+        try:
+            meta = manager.create(audio, ext, text, display_name, cover, cover_ext)
+        except ValueError as exc:
+            return jsonify(error=str(exc)), 400
         return jsonify(meta), 201
 
     @app.get("/api/jobs/<job_id>")
