@@ -21,7 +21,7 @@ function App() {
             </span>
           )}
           {server && server !== 'down' && server !== 'loading' && (
-            <span className="chip">{server.fake ? '假对齐模式' : '真实模型'}</span>
+            <span className="chip">{server.device}</span>
           )}
         </div>
       </header>
@@ -29,10 +29,7 @@ function App() {
       {server === 'down' && (
         <div className="banner" role="alert">
           无法连接后端服务。先在仓库里启动它，再刷新本页：
-          <code>
-            cd src &amp;&amp; ALIGN_FAKE=1 ../.venv/bin/python
-            server.py
-          </code>
+          <code>cd src &amp;&amp; ../.venv/bin/python server.py</code>
         </div>
       )}
 

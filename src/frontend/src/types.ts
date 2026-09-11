@@ -38,7 +38,6 @@ export interface JobResult {
 
 export interface Health {
   ok: boolean
-  fake: boolean
   device: string
 }
 

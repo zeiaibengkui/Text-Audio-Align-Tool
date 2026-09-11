@@ -16,17 +16,16 @@ cd src
 ../.venv/bin/python export_align.py      # align + write align.json  (real model, minutes)
 ../.venv/bin/python align_core.py        # align + write subtitles.srt only
 ../.venv/bin/python server.py            # Flask job server, real model
-ALIGN_FAKE=1 ../.venv/bin/python server.py   # same server, no model (seconds) — the dev loop
 ```
 
-All scripts use relative paths (`./data/text.txt`, `data/audio.mp3`) — run from `src/`. Alignment loads the model and takes minutes; it is not an edit-test loop. `ALIGN_FAKE=1` is the quick path.
+All scripts use relative paths (`./data/text.txt`, `data/audio.mp3`) — run from `src/`. Alignment loads the model and takes minutes; it is not an edit-test loop.
 
 Frontend (`src/frontend/`): use **pnpm** (`npm` is broken with EBADDEVENGINES — devEngines pins pnpm). `pnpm dev` / `pnpm build` / `pnpm lint` (oxlint), `pnpm exec tsc -b` for type-checking only. No test suite exists. Export the scroll to video with `pnpm export:scroll -- --json ../align.json --audio ../data/audio.mp3 --out scroll.mp4` (or `node scripts/export-scroll.mjs ...`).
 
 ## Environment
 
 - PyTorch is the **Intel XPU** build: `torch.cuda.is_available()` is False, `torch.xpu.is_available()` is True. Select device as `torch.device("xpu" if torch.xpu.is_available() else "cpu")`.
-- `ALIGN_DEVICE=xpu` is **verified** on this machine (Intel Arc, ~3.7 GB resident). A root `.env` is loaded automatically at `align_core` import (deps-free KEY=VALUE parser; explicitly set env vars win) — it resolves from `align_core.py`'s location: `.env` at the repo root (parent of `src/`), so the local `.env` holds `ALIGN_DEVICE=xpu` as the default. Without it the toolkit resolves to CPU. `ALIGN_FAKE=1` is the fastest path, then XPU (~35s end-to-end incl. load), then CPU (minutes).
+- `ALIGN_DEVICE=xpu` is **verified** on this machine (Intel Arc, ~3.7 GB resident). A root `.env` is loaded automatically at `align_core` import (deps-free KEY=VALUE parser; explicitly set env vars win) — it resolves from `align_core.py`'s location: `.env` at the repo root (parent of `src/`), so the local `.env` holds `ALIGN_DEVICE=xpu` as the default. Without it the toolkit resolves to CPU. XPU is ~35s end-to-end incl. load; CPU takes minutes.
 - `ffprobe` (ffmpeg) must be on PATH — `align_core.audio_duration()` shells out to it.
 - `jobs/` (server artifacts) and `*.srt` are gitignored.
 
@@ -37,7 +36,6 @@ Frontend (`src/frontend/`): use **pnpm** (`npm` is broken with EBADDEVENGINES �
 - **align_chunked()** — the model can't take the full ~10min audio in one pass; audio is split into ~130s segments (`k = ceil(dur/130)`) and text is split proportionally by non-whitespace char count (`split_text_by_weight`). `progress_cb(done, total)` fires per segment; raising from it aborts.
 - The model outputs words **stripped of punctuation and whitespace** — the core problem. `clean_positions()` walks each aligned char back through the original text to find its index, which is how punctuation and paragraph breaks get restored.
 - **build_cues()** splits cues on paragraph newlines, then sentence enders, then clause punctuation, then max length; `_merge_unbalanced()` keeps `【《（「` brackets with their closers. `smooth_words()` linearly interpolates zero-duration/overlapping words between trusted neighbours.
-- `fake_aligner.py` (ALIGN_FAKE=1) must emit the same alnum-only vocabulary as the real model and honor the same chunk/segment shapes, or `build_cues` sees different gaps and dev paths diverge.
 - Decoding goes through `_load_audio_auto()` — it tries `load_audio` first, and on a libsndfile failure (m4a/opus/…) falls back to `ffmpeg -i <src> -ar 16000 -ac 1 -f wav` into a temp file (deleted afterwards). Any format ffmpeg reads works; the failed job just needs a retry once the conversion lands.
 
 `export_align.py` writes `align.json` = `{audio, duration, text, words[], cues[]}`, with `audio` as the literal `data/audio.mp3` re-exported from `align_core.AUDIO_FILE` — that literal is a contract for consumers (the server rewrites it to `/api/jobs/<id>/audio`), keep it unchanged.

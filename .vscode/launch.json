@@ -2,20 +2,59 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Launch Chrome",
+      "name": "server：真实模型（XPU）",
+      "type": "debugpy",
       "request": "launch",
+      "program": "${workspaceFolder}/src/server.py",
+      "python": "${workspaceFolder}/.venv/bin/python",
+      "cwd": "${workspaceFolder}/src",
+      "console": "integratedTerminal",
+      "justMyCode": false,
+      "env": {
+        "PYTHONUNBUFFERED": "1"
+      }
+    },
+    {
+      "name": "vite dev server",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "/home/zabk/.nvm/versions/node/v26.7.0/bin/pnpm",
+      "runtimeArgs": [
+        "dev",
+        "--",
+        "--host",
+        "0.0.0.0"
+      ],
+      "cwd": "${workspaceFolder}/src/frontend",
+      "console": "integratedTerminal",
+      "disableOptimisticBPs": true
+    },
+    {
+      "name": "Chrome 调试 5173",
       "type": "chrome",
+      "request": "launch",
       "url": "http://localhost:5173",
-      "webRoot": "${workspaceFolder}"
+      "webRoot": "${workspaceFolder}/src/frontend",
+      "sourceMaps": true
     },
     {
       "type": "firefox",
       "request": "launch",
       "reAttach": true,
-      "name": "Launch localhost",
+      "name": "Firefox 调试 5173",
       "url": "http://localhost:5173",
-      "webRoot": "${workspaceFolder}"
+      "webRoot": "${workspaceFolder}/src/frontend"
     }
   ],
-  "compounds": []
+  "compounds": [
+    {
+      "name": "全部起（server + vite + Chrome）",
+      "configurations": [
+        "server：真实模型（XPU）",
+        "vite dev server",
+        "Chrome 调试 5173"
+      ],
+      "stopAll": true
+    }
+  ]
 }

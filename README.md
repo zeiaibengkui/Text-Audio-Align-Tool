@@ -11,7 +11,6 @@ src/
 ├── align_core.py             # Alignment pipeline: text+audio → word timestamps → cues (SRT)
 ├── export_align.py           # CLI: run align_core and export align.json for the frontend
 ├── server.py                 # Flask job server (job-based, since alignment outlives HTTP timeouts)
-├── fake_aligner.py           # Mock aligner for ALIGN_FAKE=1 (dev loop, no model load)
 ├── data/                     # Sample text.txt + audio.mp3 for the demo
 ├── jobs/                     # Per-job server artifacts (gitignored); sample/ seeded on first start
 └── frontend/                 # React 19 + Vite + TS workbench UI (step wizard, react-router)
@@ -26,7 +25,6 @@ src/
 # backend python flask — use the shared .venv; do NOT `uv sync` (it would replace
 # the Intel XPU torch build). Port 5000.
 .venv/bin/python src/server.py                 # real model, minutes
-ALIGN_FAKE=1 .venv/bin/python src/server.py    # fake aligner, seconds — the dev loop
 
 # frontend react — use pnpm (npm is broken with EBADDEVENGINES). Port 5173.
 cd src/frontend && pnpm i && pnpm run dev

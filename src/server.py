@@ -5,11 +5,9 @@
 
 运行：
     cd src
-    ../.venv/bin/python server.py          # 真实对齐
-    ALIGN_FAKE=1 ../.venv/bin/python server.py   # 假对齐，秒级跑通全链路
+    ../.venv/bin/python server.py
 
 环境变量：
-    ALIGN_FAKE=1     使用 fake_aligner，不加载模型
     ALIGN_DEVICE=xpu 试用 Intel GPU（未经验证；默认由 toolkit 决定，当前为 CPU）
     PORT             监听端口，默认 5000
 """
@@ -347,18 +345,8 @@ class JobManager:
             )
 
 
-_fake_aligner = None
-
-
 def get_aligner():
-    """真实对齐器走 align_core 的单例；ALIGN_FAKE=1 时换成假对齐器。"""
-    global _fake_aligner
-    if os.environ.get("ALIGN_FAKE") == "1":
-        if _fake_aligner is None:
-            from fake_aligner import FakeAligner
-
-            _fake_aligner = FakeAligner()
-        return _fake_aligner
+    """对齐器走 align_core 的单例（模型加载是一次性的大开销，只做一次）。"""
     return align_core.get_aligner(os.environ.get("ALIGN_DEVICE"))
 
 
@@ -574,7 +562,6 @@ def create_app(jobs_dir=JOBS_DIR, seed=True):
     def health():
         return jsonify(
             ok=True,
-            fake=os.environ.get("ALIGN_FAKE") == "1",
             device=os.environ.get("ALIGN_DEVICE") or "auto",
         )
 
