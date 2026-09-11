@@ -22,6 +22,10 @@ src/
 ## Develop
 
 ```bash
+# 一条命令起前后端（Flask :5000 + Vite :5173）；脚本会先 source nvm，
+# 否则 GUI 启动的进程找不到 nvm 里的 node，导出视频会用不了
+./launch.sh
+
 # backend python flask — use the shared .venv; do NOT `uv sync` (it would replace
 # the Intel XPU torch build). Port 5000.
 .venv/bin/python src/server.py                 # real model, minutes

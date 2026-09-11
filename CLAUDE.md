@@ -20,6 +20,8 @@ cd src
 
 All scripts use relative paths (`./data/text.txt`, `data/audio.mp3`) — run from `src/`. Alignment loads the model and takes minutes; it is not an edit-test loop.
 
+`./launch.sh` (repo root) starts the dev stack — Flask on `:5000` + Vite on `:5173` — after sourcing nvm. That sourcing is the point: a GUI-launched process (VS Code, desktop) has no nvm on PATH, and `server.py` locates `node` via `shutil.which("node")` for exports, so it would fail with 「找不到 node（导出需要它）」. `--no-vite` and `--debug` (Flask under `debugpy --listen 5678 --wait-for-client`, to attach a debugger to) are the variants; there is deliberately no `.vscode/launch.json` — the script is the single entry point.
+
 Frontend (`src/frontend/`): use **pnpm** (`npm` is broken with EBADDEVENGINES — devEngines pins pnpm). `pnpm dev` / `pnpm build` / `pnpm lint` (oxlint), `pnpm exec tsc -b` for type-checking only. No test suite exists. Export the scroll to video with `pnpm export:scroll -- --json ../align.json --audio ../data/audio.mp3 --out scroll.mp4` (or `node scripts/export-scroll.mjs ...`).
 
 ## Environment
