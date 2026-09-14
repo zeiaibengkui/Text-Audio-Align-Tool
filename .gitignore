@@ -30,3 +30,5 @@ src/jobs/
 # slash are anchored to this file's directory.
 /src/data/
 /src/jobs
+# 本地 agent 技能与笔记，不入库
+.claude/
