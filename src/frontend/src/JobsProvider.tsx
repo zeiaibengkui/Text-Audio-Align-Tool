@@ -1,11 +1,35 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import * as api from './api'
-import { JobsContext, type ServerState } from './jobs-context'
+import { JobsContext, type AuthState, type ServerState } from './jobs-context'
 import { ACTIVE_STATUSES, type JobMeta } from './types'
 
 export function JobsProvider({ children }: { children: ReactNode }) {
   const [server, setServer] = useState<ServerState>('loading')
+  const [auth, setAuth] = useState<AuthState>('loading')
+  const [authRequired, setAuthRequired] = useState(false)
   const [jobs, setJobs] = useState<JobMeta[]>([])
+
+  // 会话过期（或另一处登出）时后端回 401，统一在这里退回登录页
+  useEffect(() => {
+    api.setUnauthorizedHandler(() => setAuth('out'))
+    return () => api.setUnauthorizedHandler(null)
+  }, [])
+
+  // ---- 进站先问 /api/me：要不要口令、我算不算已登录 ----
+  useEffect(() => {
+    let live = true
+    api
+      .getMe()
+      .then((m) => {
+        if (!live) return
+        setAuthRequired(m.required)
+        setAuth(m.authed ? 'in' : 'out')
+      })
+      .catch(() => live && setAuth('out'))
+    return () => {
+      live = false
+    }
+  }, [])
 
   // ---- server health (one-shot) ----
   useEffect(() => {
@@ -22,6 +46,7 @@ export function JobsProvider({ children }: { children: ReactNode }) {
   // ---- job list (poll fast while anything is active) ----
   const hasActive = jobs.some((j) => ACTIVE_STATUSES.includes(j.status))
   useEffect(() => {
+    if (auth !== 'in') return   // 没登录就别轮询，省得刷一屏 401
     let live = true
     const load = () =>
       api
@@ -38,7 +63,21 @@ export function JobsProvider({ children }: { children: ReactNode }) {
       clearInterval(id)
       clearTimeout(first)
     }
-  }, [hasActive])
+  }, [hasActive, auth])
+
+  const login = useCallback(async (token: string) => {
+    await api.login(token)   // 口令不对会带着后端的「口令不对」抛出来
+    setAuth('in')
+  }, [])
+
+  const logout = useCallback(async () => {
+    try {
+      await api.logout()
+    } finally {
+      setAuth('out')
+      setJobs([])
+    }
+  }, [])
 
   // ---- wrappers keep the list fresh for the stepper ----
   const createJob = useCallback(
@@ -62,8 +101,8 @@ export function JobsProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const value = useMemo(
-    () => ({ server, jobs, createJob, deleteJob, retryJob }),
-    [server, jobs, createJob, deleteJob, retryJob],
+    () => ({ server, auth, authRequired, login, logout, jobs, createJob, deleteJob, retryJob }),
+    [server, auth, authRequired, login, logout, jobs, createJob, deleteJob, retryJob],
   )
 
   return <JobsContext.Provider value={value}>{children}</JobsContext.Provider>

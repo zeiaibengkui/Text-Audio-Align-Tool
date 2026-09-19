@@ -8,10 +8,15 @@
     ../.venv/bin/python server.py
 
 环境变量：
+    AUTH_TOKEN       访问口令；设了才启用鉴权，不设则 /api 完全开放（详见 DEPLOY.md）
+    AUTH_COOKIE_SECURE=1  cookie 加 Secure 标志（HTTPS 部署时开）
+    SECRET_KEY       会话签名密钥；不设则由 AUTH_TOKEN 派生（重启不掉线）
     ALIGN_DEVICE=xpu 试用 Intel GPU（未经验证；默认由 toolkit 决定，当前为 CPU）
     PORT             监听端口，默认 5000
 """
 
+import hashlib
+import hmac
 import json
 import os
 import queue
@@ -26,7 +31,7 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, request, send_from_directory, session
 from werkzeug.utils import secure_filename
 
 import align_core
@@ -38,6 +43,27 @@ ALLOWED_EXTS = {".mp3", ".wav", ".m4a", ".ogg", ".flac", ".opus", ".aac"}
 COVER_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
 MAX_CONTENT_LENGTH = 1024 ** 3  # 1 GiB
 MAX_TEXT_CHARS = 1_000_000
+
+# ---- 访问口令（AUTH_TOKEN）-----------------------------------------------
+# 单机自用的最小鉴权：口令换一个签名 cookie（Flask session），之后同源请求
+# 自动带上，前端不用做任何额外的凭据管理。**没设 AUTH_TOKEN 就完全不校验**，
+# 本地开发照旧；公网部署必须设（见 DEPLOY.md）。
+# 之所以不用 HTTP Basic Auth：浏览器对 fetch 的凭据传递很不稳，页面能开、
+# 接口全 401，是这类问题的经典坑。
+OPEN_PATHS = {"/api/health", "/api/me", "/api/login", "/api/logout"}
+
+
+def auth_token():
+    """当前配置的访问口令；空字符串 = 未启用鉴权。"""
+    return os.environ.get("AUTH_TOKEN") or ""
+
+
+def _session_key():
+    """SECRET_KEY 没配时由 AUTH_TOKEN 派生：重启后 cookie 依然有效，
+    也免得再多一个必须配置的环境变量。"""
+    return os.environ.get("SECRET_KEY") or hashlib.sha256(
+        ("taa:" + auth_token()).encode()
+    ).hexdigest()
 
 ACTIVE = ("queued", "running")
 
@@ -548,6 +574,16 @@ def seed_sample_job(manager):
 def create_app(jobs_dir=JOBS_DIR, seed=True):
     app = Flask(__name__)
     app.config["MAX_CONTENT_LENGTH"] = MAX_CONTENT_LENGTH
+    app.secret_key = _session_key()
+    app.config.update(
+        SESSION_COOKIE_HTTPONLY=True,   # JS 读不到 cookie，XSS 拿不走会话
+        SESSION_COOKIE_SAMESITE="Lax",  # 跨站发起的 POST 不带 cookie，够挡 CSRF
+        # 上了 HTTPS 再打开（DEPLOY.md 里 AUTH_COOKIE_SECURE=1）；本地 http 打开会直接丢 cookie
+        SESSION_COOKIE_SECURE=os.environ.get("AUTH_COOKIE_SECURE") == "1",
+        SESSION_COOKIE_MAX_AGE=60 * 60 * 24 * 30,
+    )
+    if not auth_token():
+        print("警告：未设置 AUTH_TOKEN，/api 完全开放（仅限本地这样跑）", flush=True)
     manager = JobManager(jobs_dir)
     app.config["JOB_MANAGER"] = manager
     if seed:
@@ -558,12 +594,44 @@ def create_app(jobs_dir=JOBS_DIR, seed=True):
     def too_large(_):
         return jsonify(error="音频文件过大（上限 1 GiB）"), 413
 
+    @app.before_request
+    def _require_login():
+        """除了白名单，/api 一律要求已登录（未配 AUTH_TOKEN 时直接放行）。"""
+        if not auth_token() or request.path in OPEN_PATHS:
+            return None
+        if session.get("authed"):
+            return None
+        return jsonify(error="未登录"), 401
+
     @app.get("/api/health")
     def health():
         return jsonify(
             ok=True,
             device=os.environ.get("ALIGN_DEVICE") or "auto",
         )
+
+    @app.get("/api/me")
+    def me():
+        """前端进站先问一次：要不要口令、我这会儿算不算已登录。"""
+        required = bool(auth_token())
+        return jsonify(required=required, authed=(not required) or bool(session.get("authed")))
+
+    @app.post("/api/login")
+    def login():
+        if not auth_token():
+            return jsonify(ok=True, authed=True)
+        body = request.get_json(silent=True) or {}
+        given = (body.get("token") or request.form.get("token") or "").strip()
+        if not hmac.compare_digest(given, auth_token()):
+            time.sleep(0.5)   # 拖住在线的口令爆破
+            return jsonify(error="口令不对"), 401
+        session["authed"] = True
+        return jsonify(ok=True, authed=True)
+
+    @app.post("/api/logout")
+    def logout():
+        session.pop("authed", None)
+        return jsonify(ok=True, authed=False)
 
     @app.get("/api/jobs")
     def list_jobs():

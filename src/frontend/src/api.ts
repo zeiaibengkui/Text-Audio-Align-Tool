@@ -2,6 +2,12 @@ import type { Health, JobMeta, JobResult } from './types'
 
 const BASE = '/api'
 
+/** 撞上 401 的回调：会话过期/被登出时把前端踢回登录页（见 JobsProvider）。 */
+let onUnauthorized: (() => void) | null = null
+export function setUnauthorizedHandler(fn: (() => void) | null) {
+  onUnauthorized = fn
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(BASE + path, init)
   if (!res.ok) {
@@ -12,9 +18,32 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     } catch {
       // no JSON body — keep the status message
     }
+    if (res.status === 401) onUnauthorized?.()
     throw new Error(message)
   }
   return res.json() as Promise<T>
+}
+
+export interface Me {
+  /** 服务端有没有配 AUTH_TOKEN（没配就是完全开放，前端直接放行） */
+  required: boolean
+  authed: boolean
+}
+
+export function getMe(): Promise<Me> {
+  return request('/me')
+}
+
+export function login(token: string): Promise<Me> {
+  return request('/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token }),
+  })
+}
+
+export function logout(): Promise<Me> {
+  return request('/logout', { method: 'POST' })
 }
 
 export function listJobs(): Promise<JobMeta[]> {
