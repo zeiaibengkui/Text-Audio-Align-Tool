@@ -1,4 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import Alert from '@mui/material/Alert'
+import Box from '@mui/material/Box'
+import Button from '@mui/material/Button'
+import LinearProgress from '@mui/material/LinearProgress'
+import Stack from '@mui/material/Stack'
+import Typography from '@mui/material/Typography'
 import { ScrollRenderer, type CoverSource, type ScrollData } from './scroll'
 import {
   getExport,
@@ -138,61 +144,90 @@ export function ScrollPlayer({
     }
   }
 
+  const progress = Math.round((exportState?.progress ?? 0) * 100)
+
   return (
-    <div className="scroll-player">
-      <canvas ref={canvasRef} className="scroll-canvas" />
-      <audio ref={audioRef} controls preload="metadata" src={audioUrl} />
-      <p className="scroll-hint">
+    <Stack spacing={1.5}>
+      <Box
+        component="canvas"
+        ref={canvasRef}
+        sx={{ width: '100%', aspectRatio: '16 / 9', display: 'block', borderRadius: 2, bgcolor: '#3b342a' }}
+      />
+      <Box
+        component="audio"
+        ref={audioRef}
+        controls
+        preload="metadata"
+        src={audioUrl}
+        sx={{ width: '100%' }}
+      />
+      <Typography variant="body2" sx={{ color: 'text.disabled', fontSize: 12 }}>
         文字随朗读声逐字入墨，卷轴缓缓铺展。可拖动进度条回看。
-      </p>
-      <div className="scroll-export">
+      </Typography>
+
+      <Stack spacing={1}>
         {exportState === null && (
-          <button
-            className="btn export-btn"
+          <Button
+            variant="contained"
             onClick={() => void onExport()}
             disabled={exportError !== null}
+            sx={{ alignSelf: 'flex-start' }}
           >
             导出视频
-          </button>
+          </Button>
         )}
         {exportState?.status === 'none' && (
-          <button className="btn export-btn" onClick={() => void onExport()}>
+          <Button
+            variant="contained"
+            onClick={() => void onExport()}
+            sx={{ alignSelf: 'flex-start' }}
+          >
             导出视频
-          </button>
+          </Button>
         )}
-        {(exportState?.status === 'queued' ||
-          exportState?.status === 'rendering') && (
-          <button className="btn export-btn" disabled>
-            {exportState.status === 'queued'
-              ? '排队中'
-              : `导出中 ${Math.round((exportState.progress ?? 0) * 100)}%`}
-          </button>
+        {exporting && (
+          <Box sx={{ maxWidth: 360 }}>
+            <Button variant="contained" disabled fullWidth>
+              {exportState?.status === 'queued' ? '排队中' : `导出中 ${progress}%`}
+            </Button>
+            {exportState?.status === 'rendering' && (
+              <LinearProgress
+                variant={progress > 0 ? 'determinate' : 'indeterminate'}
+                value={progress}
+                sx={{ mt: 1 }}
+              />
+            )}
+          </Box>
         )}
         {exportState?.status === 'done' && (
-          <>
-            <a className="btn export-btn" href={exportVideoUrl(jobId)} download>
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
+            <Button variant="contained" href={exportVideoUrl(jobId)} download>
               下载视频
-            </a>
-            <button className="btn export-btn" onClick={() => void onExport(true)}>
+            </Button>
+            <Button variant="outlined" onClick={() => void onExport(true)}>
               重新导出
-            </button>
+            </Button>
             {exportState.elapsed_sec != null && (
-              <em className="export-elapsed">
+              <Typography variant="body2" sx={{ color: 'text.disabled', fontSize: 12 }}>
                 耗时 {fmtElapsed(exportState.elapsed_sec)}
-              </em>
+              </Typography>
             )}
-          </>
+          </Stack>
         )}
         {exportState?.status === 'failed' && (
-          <span className="export-fail">
+          <Alert
+            severity="error"
+            action={
+              <Button color="inherit" size="small" onClick={() => void onExport()}>
+                重试
+              </Button>
+            }
+          >
             导出失败：{exportState.error}
-            <button className="export-retry" onClick={() => void onExport()}>
-              重试
-            </button>
-          </span>
+          </Alert>
         )}
-        {exportError && <span className="export-fail">{exportError}</span>}
-      </div>
-    </div>
+        {exportError && <Alert severity="error">{exportError}</Alert>}
+      </Stack>
+    </Stack>
   )
 }

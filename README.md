@@ -13,8 +13,9 @@ src/
 ├── server.py                 # Flask job server (job-based, since alignment outlives HTTP timeouts)
 ├── data/                     # Sample text.txt + audio.mp3 for the demo
 ├── jobs/                     # Per-job server artifacts (gitignored); sample/ seeded on first start
-└── frontend/                 # React 19 + Vite + TS workbench UI (step wizard, react-router)
+└── frontend/                 # React 19 + Vite + TS + MUI, mobile-first app-style UI
     ├── src/                  # routes: / /create /jobs/:id /jobs/:id/render — pages/ + components/,
+    │                         #   theme.ts (all design tokens), steps.ts (bottom nav / top tabs),
     │                         #   scroll.ts (canvas engine shared with export), api.ts, JobsProvider
     └── scripts/export-scroll.mjs   # Headless MP4 export (@napi-rs/canvas + ffmpeg rawpipe)
 ```
@@ -33,6 +34,9 @@ src/
 # frontend react — use pnpm (npm is broken with EBADDEVENGINES). Port 5173.
 cd src/frontend && pnpm i && pnpm run dev
 ```
+
+访问口令：仓库根 `.env` 里的 `AUTH_TOKEN=...` 一设就要求登录（前端 `/login` 换 cookie），
+留空则完全开放。公网部署见 [DEPLOY.md](DEPLOY.md)。
 
 ## Roadmap
 

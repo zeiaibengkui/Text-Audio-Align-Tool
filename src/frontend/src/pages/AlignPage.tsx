@@ -1,5 +1,12 @@
 import { useState } from 'react'
 import { Link, Navigate, useParams } from 'react-router'
+import Alert from '@mui/material/Alert'
+import Button from '@mui/material/Button'
+import Card from '@mui/material/Card'
+import CircularProgress from '@mui/material/CircularProgress'
+import LinearProgress from '@mui/material/LinearProgress'
+import Stack from '@mui/material/Stack'
+import Typography from '@mui/material/Typography'
 import { jobAudioUrl } from '../api'
 import { ResultView } from '../components/ResultView'
 import { STAGE_LABEL } from '../format'
@@ -32,62 +39,50 @@ export default function AlignPage() {
     }
   }
 
-  const retryBlock = (
-    <>
-      <button className="btn" onClick={onRetry}>
-        重新对齐
-      </button>
-      {retryError && <p className="form-error">{retryError}</p>}
-    </>
-  )
-
   return (
-    <section className="panel result" aria-live="polite">
+    <Card sx={{ p: 2 }} aria-live="polite">
       {error ? (
-        <div className="result-empty">
-          <p className="form-error">{error === MISSING ? '任务不存在或已被删除' : error}</p>
-          <p className="result-sub">
-            <button className="btn" onClick={reload}>
-              重新加载
-            </button>
-          </p>
-          <p className="result-sub">
-            <Link to="/">返回任务列表</Link>
-          </p>
-        </div>
+        <Stack spacing={2} sx={{ py: 4, alignItems: 'center' }}>
+          <Alert severity="warning">
+            {error === MISSING ? '任务不存在或已被删除' : error}
+          </Alert>
+          <Button variant="outlined" onClick={reload}>
+            重新加载
+          </Button>
+          <Button component={Link} to="/">
+            返回任务列表
+          </Button>
+        </Stack>
       ) : !job ? (
-        <div className="result-empty">
-          <p>加载中…</p>
-        </div>
+        <Stack spacing={2} sx={{ py: 4, alignItems: 'center' }}>
+          <CircularProgress size={22} />
+          <Typography sx={{ color: 'text.secondary' }}>加载中…</Typography>
+        </Stack>
       ) : ACTIVE_STATUSES.includes(job.status) ? (
-        <>
-          <div className="result-empty">
-            <p>{STAGE_LABEL[job.stage ?? 'queued']}</p>
-            <p className="result-sub">对齐需要几秒到几分钟，页面会自动更新。</p>
-          </div>
-          <div className="result-progress">
-            <span className="progress">
-              <span
-                className="progress-fill"
-                style={{ width: `${Math.max(2, job.progress * 100)}%` }}
-              />
-            </span>
-          </div>
-        </>
+        <Stack spacing={2} sx={{ py: 5, alignItems: 'center' }}>
+          <Typography variant="h2">{STAGE_LABEL[job.stage ?? 'queued']}</Typography>
+          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+            对齐需要几秒到几分钟，页面会自动更新。
+          </Typography>
+          <LinearProgress
+            variant="determinate"
+            value={Math.max(2, job.progress * 100)}
+            sx={{ width: '100%', maxWidth: 320, mt: 1 }}
+          />
+        </Stack>
       ) : job.status === 'done' ? (
         failed && !ready ? (
-          <div className="result-empty">
-            <p>结果加载失败，请刷新重试。</p>
-            <p className="result-sub">
-              <button className="btn" onClick={reloadResult}>
-                重新加载
-              </button>
-            </p>
-          </div>
+          <Stack spacing={2} sx={{ py: 4, alignItems: 'center' }}>
+            <Typography>结果加载失败，请刷新重试。</Typography>
+            <Button variant="outlined" onClick={reloadResult}>
+              重新加载
+            </Button>
+          </Stack>
         ) : !ready || !result ? (
-          <div className="result-empty">
-            <p>加载中…</p>
-          </div>
+          <Stack spacing={2} sx={{ py: 4, alignItems: 'center' }}>
+            <CircularProgress size={22} />
+            <Typography sx={{ color: 'text.secondary' }}>加载中…</Typography>
+          </Stack>
         ) : (
           <>
             <ResultView
@@ -97,22 +92,35 @@ export default function AlignPage() {
               audioUrl={jobAudioUrl(id)}
               coverUrl={null}
             />
-            <p className="result-sub">
-              <Link className="btn" to={`/jobs/${id}/render`}>
-                下一步：渲染
-              </Link>
-            </p>
+            <Button
+              component={Link}
+              to={`/jobs/${id}/render`}
+              variant="contained"
+              fullWidth
+              sx={{ mt: 2 }}
+            >
+              下一步：渲染
+            </Button>
           </>
         )
       ) : (
-        <div className="result-empty">
-          <p className="form-error">{job.error ?? STAGE_LABEL[job.status]}</p>
-          <p className="result-sub">{retryBlock}</p>
-          <p className="result-sub">
-            <Link to="/">返回任务列表</Link>
-          </p>
-        </div>
+        <Stack spacing={2} sx={{ py: 4, alignItems: 'center' }}>
+          <Alert severity="error" sx={{ width: '100%' }}>
+            {job.error ?? STAGE_LABEL[job.status]}
+          </Alert>
+          <Button variant="contained" onClick={() => void onRetry()} sx={{ minWidth: 160 }}>
+            重新对齐
+          </Button>
+          {retryError && (
+            <Typography color="primary.dark" sx={{ fontSize: 13 }}>
+              {retryError}
+            </Typography>
+          )}
+          <Button component={Link} to="/">
+            返回任务列表
+          </Button>
+        </Stack>
       )}
-    </section>
+    </Card>
   )
 }

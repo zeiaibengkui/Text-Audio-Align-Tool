@@ -13,5 +13,6 @@ export function fmtTime(sec: number | null | undefined, decimals = 0): string {
   if (sec == null || !Number.isFinite(sec) || sec < 0) return '--:--'
   const m = Math.floor(sec / 60)
   const s = (sec - m * 60).toFixed(decimals)
-  return `${m}:${s.padStart(decimals ? 5 : 2, '0')}`
+  // 秒数补成「两位整数 + 小数点 + decimals 位小数」：1:40 / 0:00.0 / 0:03.45
+  return `${m}:${s.padStart(decimals > 0 ? 3 + decimals : 2, '0')}`
 }

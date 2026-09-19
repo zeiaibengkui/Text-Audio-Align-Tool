@@ -45,34 +45,51 @@ port_busy "$PORT" && { echo "端口 $PORT 已被占用（先停掉旧的 server�
 
 cd "$ROOT/src"
 
+LOG="${TMPDIR:-/tmp}/taat-dev-stack.log"
+: > "$LOG"
+
+# 两个服务都用 setsid 起、stdin 关掉、输出重定向进日志：后台进程的输出
+# 一碰终端就可能吃 SIGTTOU（终端 TOSTOP）而被停住，看起来就是「服务莫名其妙
+# 挂了」，ps 里是 T 状态。开新会话 + 不碰 tty 就彻底没有这个失败模式。
 SERVER_PID=
-cleanup() { [ -n "$SERVER_PID" ] && kill "$SERVER_PID" 2>/dev/null || true; }
+VITE_PID=
+cleanup() {
+    for pid in "$SERVER_PID" "$VITE_PID"; do
+        [ -n "$pid" ] || continue
+        # 负号 = 整个进程组：pnpm 后面还挂着 vite，单杀 pnpm 会留下孤儿 vite
+        kill -TERM -- "-$pid" 2>/dev/null || kill -TERM "$pid" 2>/dev/null || true
+    done
+}
 trap cleanup EXIT INT TERM
 
 if [ "$DEBUG" = 1 ]; then
     echo "Flask 以 debugpy 启动，监听 5678 并等待 attach（编辑器里 attach 到 127.0.0.1:5678）"
-    "$PY" -m debugpy --listen 5678 --wait-for-client server.py &
+    setsid "$PY" -m debugpy --listen 5678 --wait-for-client server.py </dev/null >>"$LOG" 2>&1 &
 else
-    "$PY" server.py &
+    setsid "$PY" server.py </dev/null >>"$LOG" 2>&1 &
 fi
 SERVER_PID=$!
 
 for _ in $(seq 1 60); do
     curl -sf -m 2 "http://127.0.0.1:$PORT/api/health" >/dev/null && break
-    kill -0 "$SERVER_PID" 2>/dev/null || { echo "Flask 启动失败，看上面的输出" >&2; exit 1; }
+    kill -0 "$SERVER_PID" 2>/dev/null || { echo "Flask 启动失败，看 $LOG" >&2; exit 1; }
     sleep 0.5
 done
 
 echo "Flask  → http://127.0.0.1:$PORT/api/health"
 for ip in $(ip -4 -o addr show scope global 2>/dev/null \
-        | awk '$2 !~ /^(docker|veth|virbr|br-|tun|wg)/ {split($4, a, "/"); print a[1]}'); do
+        | awk '$2 ~ /^(en|eth|wl)/ {split($4, a, "/"); print a[1]}'); do
     echo "         局域网：http://$ip:$PORT"
 done
 
 if [ "$WITH_VITE" = 0 ]; then
+    echo "日志   → $LOG"
     wait "$SERVER_PID"   # 前台等 Flask，Ctrl-C 结束
 else
     echo "Vite   → http://127.0.0.1:5173（Ctrl-C 两个一起停）"
+    echo "日志   → $LOG"
     cd "$ROOT/src/frontend"
-    pnpm dev -- --host 0.0.0.0
+    setsid pnpm dev -- --host 0.0.0.0 </dev/null >>"$LOG" 2>&1 &
+    VITE_PID=$!
+    wait "$VITE_PID"
 fi

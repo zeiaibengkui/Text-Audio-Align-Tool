@@ -64,6 +64,8 @@ User=<运行用户>
 WorkingDirectory=/opt/taa/src
 Environment=PORT=5000
 Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=AUTH_TOKEN=<openssl rand -base64 24 生成的长口令>
+Environment=AUTH_COOKIE_SECURE=1
 ExecStart=/opt/taa/.venv/bin/python server.py
 Restart=always
 RestartSec=5
@@ -79,6 +81,15 @@ sudo journalctl -u taa -f        # 每个请求都会打一行日志
 
 `Environment=PATH=...` 不能省：systemd 默认的 PATH 里没有 node，导出视频时会报
 「找不到 node（导出需要它）」。
+
+`AUTH_TOKEN` 一设，整个 `/api` 就要求登录：浏览器打开站点会先看到口令页，输对了换一个
+**HttpOnly 签名 cookie**（有效期 30 天），之后由前端自动携带，顶栏多一个「退出」。
+留空/不设 = 完全开放，只适合本机。配套两个开关：
+
+- `AUTH_COOKIE_SECURE=1` —— HTTPS 部署时打开（`certbot` 之后就是 HTTPS）。开着但走
+  HTTP 会让浏览器直接丢掉 cookie，症状是「口令明明对，进去又被弹回登录页」。
+- `SECRET_KEY` —— 可选。不设时由 `AUTH_TOKEN` 派生，重启后 cookie 依然有效；
+  改口令 = 所有已登录的浏览器失效，这通常正是想要的。
 
 ## 4. 前端与 nginx
 
@@ -110,7 +121,19 @@ server {
         proxy_read_timeout 900s;
         proxy_send_timeout 900s;
     }
+
+    location = /api/login {              # 兜底限速：口令本身已经拖了 0.5s，这里再挡一层爆破
+        limit_req zone=login burst=5 nodelay;
+        proxy_pass http://127.0.0.1:5000;
+        proxy_set_header Host $host;
+    }
 }
+```
+
+`limit_req` 要在 `http {}` 里先定义 zone（`/etc/nginx/nginx.conf`）：
+
+```nginx
+limit_req_zone $binary_remote_addr zone=login:10m rate=10r/m;
 ```
 
 ```bash
@@ -123,20 +146,25 @@ sudo certbot --nginx -d <你的域名> --non-interactive --agree-tos -m <邮箱>
 超时给到 900 秒是有原因的：长音频的对齐和视频导出都远超 nginx 默认的 60 秒。
 `client_max_body_size` 同理，默认 1 MB 连一段朗读都传不上去。
 
-### 不要给站点加 HTTP Basic Auth
+### 别用 nginx 的 HTTP Basic Auth 收口
 
-页面本身能通过验证，但前端的 `fetch('/api/...')` 不会带上凭据，结果是页面打得开、右上角
-一直显示「后端未连接」，而服务器上 `curl` 一切正常，非常难查。要限制访问就用不可猜的路径或
-者 IP 白名单。
+那是另一层、且对这套前端无效：不写 `credentials` 的 `fetch('/api/...')` 不会带凭据，结果是
+页面打得开、右上角一直显示「后端未连接」，而服务器上 `curl` 一切正常，非常难查。要收口就用
+上面的 `AUTH_TOKEN`（前端认识它，401 会自动弹回口令页）。
 
 ## 5. 验证
 
 ```bash
-curl -s https://<域名>/api/health      # {"device":"auto","ok":true}
+curl -s https://<域名>/api/health                    # {"device":"auto","ok":true}，免登录
+curl -s -o /dev/null -w '%{http_code}\n' https://<域名>/api/jobs    # 设了口令就是 401
+curl -s -c /tmp/cj -X POST -H 'Content-Type: application/json' \
+     -d '{"token":"<口令>"}' https://<域名>/api/login                 # {"authed":true,"ok":true}
+curl -s -b /tmp/cj https://<域名>/api/jobs | head -c 100             # 带 cookie 才有列表
 ```
 
-健康检查只能证明进程活着。真正要确认的是整条链路，用浏览器走一遍：`/create` 传一段 mp3 +
-粘贴对应文本 → 等任务变 `done` 看到字幕行 → 进渲染页 → 等导出完成出现「下载视频」。
+健康检查只能证明进程活着。真正要确认的是整条链路，用浏览器走一遍：输口令进站 →
+`/create` 传一段 mp3 + 粘贴对应文本 → 等任务变 `done` 看到字幕行 → 进渲染页 → 等导出完成
+出现「下载视频」。
 
 造测试音频（macOS）：
 
@@ -155,6 +183,7 @@ MP4 导出 5 到 7 秒。对齐和导出都是 CPU 密集且导出按核数并�
 cd /opt/taa && git pull
 cd src/frontend && pnpm install && pnpm run build   # 只动前端：不用重启，不用 reload nginx
 sudo systemctl restart taa                          # 只动后端
+sudo systemctl show taa -p Environment              # 确认 AUTH_TOKEN 还在（systemd 改完要 daemon-reload）
 df -h /                                             # 每个任务都会留下音频和 mp4
 sudo rm -rf /opt/taa/src/jobs/<id>                  # 清理旧任务
 ```
