@@ -93,13 +93,15 @@ class JobManager:
     期间绝不持锁，否则状态接口会被阻塞。
     """
 
-    def __init__(self, jobs_dir=JOBS_DIR):
+    def __init__(self, jobs_dir=JOBS_DIR, on_done=None):
         self.jobs_dir = Path(jobs_dir)
         self.jobs_dir.mkdir(parents=True, exist_ok=True)
         self._jobs = {}
         self._lock = threading.Lock()
         self._queue = queue.Queue()
         self._worker = None
+        # 对齐完成后回调（现在是 ExportManager.ensure：自动排队导出卷轴视频）
+        self._on_done = on_done
         self._load_from_disk()
 
     # ---------- 持久化 ----------
@@ -209,6 +211,22 @@ class JobManager:
         if not wav.exists():
             _transcode_align_wav(audio_path, wav)
         return wav
+
+    def _autostart_export(self, job_id):
+        """对齐跑完就顺手把卷轴视频排上队，用户点进渲染页时通常已经好了。
+
+        导出起不来（缺 node、缺字体……）不能连累对齐结果，所以这里只留日志。
+        on_done 为 None（AUTO_EXPORT=0）时什么都不做。
+        """
+        if self._on_done is None:
+            return
+        meta = self.get(job_id)
+        if not meta or meta.get("status") != "done":
+            return
+        try:
+            self._on_done(meta)
+        except Exception:
+            traceback.print_exc()
 
     def retry(self, job_id):
         """重试失败（或已取消但分片还在）的任务：复位状态、排队重跑。
@@ -357,6 +375,7 @@ class JobManager:
                 cue_count=len(cues),
                 error=None,
             )
+            self._autostart_export(job_id)
         except JobCancelled:
             self._remove_dir(job_id)
             with self._lock:
@@ -584,7 +603,10 @@ def create_app(jobs_dir=JOBS_DIR, seed=True):
     )
     if not auth_token():
         print("警告：未设置 AUTH_TOKEN，/api 完全开放（仅限本地这样跑）", flush=True)
-    manager = JobManager(jobs_dir)
+    # 对齐一完成就自动排队导出（AUTO_EXPORT=0 关掉，比如只想批量出字幕时）
+    exports = ExportManager(jobs_dir)
+    auto_export = os.environ.get("AUTO_EXPORT", "1") != "0"
+    manager = JobManager(jobs_dir, on_done=exports.ensure if auto_export else None)
     app.config["JOB_MANAGER"] = manager
     if seed:
         seed_sample_job(manager)
@@ -725,8 +747,6 @@ def create_app(jobs_dir=JOBS_DIR, seed=True):
         if not manager.delete(job_id):
             return jsonify(error="任务不存在"), 404
         return "", 204
-
-    exports = ExportManager(jobs_dir)
 
     @app.post("/api/jobs/<job_id>/export")
     def start_export(job_id):
