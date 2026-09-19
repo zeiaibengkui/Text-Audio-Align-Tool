@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Link, Navigate, useParams } from 'react-router'
 import Alert from '@mui/material/Alert'
 import Button from '@mui/material/Button'
 import Card from '@mui/material/Card'
+import CardContent from '@mui/material/CardContent'
 import CircularProgress from '@mui/material/CircularProgress'
 import LinearProgress from '@mui/material/LinearProgress'
 import Stack from '@mui/material/Stack'
@@ -16,6 +17,15 @@ import { useJob } from '../useJob'
 import { useResult } from '../useResult'
 
 const MISSING = '任务不存在'
+
+/** 居中一列的状态卡片，几个分支共用。 */
+function Centered({ children }: { children: ReactNode }) {
+  return (
+    <Stack spacing={2} sx={{ py: 4, alignItems: 'center' }}>
+      {children}
+    </Stack>
+  )
+}
 
 export default function AlignPage() {
   const { id } = useParams()
@@ -39,88 +49,70 @@ export default function AlignPage() {
     }
   }
 
-  return (
-    <Card sx={{ p: 2 }} aria-live="polite">
-      {error ? (
-        <Stack spacing={2} sx={{ py: 4, alignItems: 'center' }}>
-          <Alert severity="warning">
-            {error === MISSING ? '任务不存在或已被删除' : error}
-          </Alert>
-          <Button variant="outlined" onClick={reload}>
-            重新加载
-          </Button>
+  const body = () => {
+    if (error) {
+      return (
+        <Centered>
+          <Alert severity="warning">{error === MISSING ? '任务不存在或已被删除' : error}</Alert>
+          <Button onClick={reload}>重新加载</Button>
           <Button component={Link} to="/">
             返回任务列表
           </Button>
-        </Stack>
-      ) : !job ? (
-        <Stack spacing={2} sx={{ py: 4, alignItems: 'center' }}>
-          <CircularProgress size={22} />
-          <Typography sx={{ color: 'text.secondary' }}>加载中…</Typography>
-        </Stack>
-      ) : ACTIVE_STATUSES.includes(job.status) ? (
-        <Stack spacing={2} sx={{ py: 5, alignItems: 'center' }}>
-          <Typography variant="h2">{STAGE_LABEL[job.stage ?? 'queued']}</Typography>
-          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-            对齐需要几秒到几分钟，页面会自动更新。
-          </Typography>
-          <LinearProgress
-            variant="determinate"
-            value={Math.max(2, job.progress * 100)}
-            sx={{ width: '100%', maxWidth: 320, mt: 1 }}
-          />
-        </Stack>
-      ) : job.status === 'done' ? (
-        failed && !ready ? (
-          <Stack spacing={2} sx={{ py: 4, alignItems: 'center' }}>
-            <Typography>结果加载失败，请刷新重试。</Typography>
-            <Button variant="outlined" onClick={reloadResult}>
-              重新加载
-            </Button>
-          </Stack>
-        ) : !ready || !result ? (
-          <Stack spacing={2} sx={{ py: 4, alignItems: 'center' }}>
-            <CircularProgress size={22} />
-            <Typography sx={{ color: 'text.secondary' }}>加载中…</Typography>
-          </Stack>
-        ) : (
-          <>
-            <ResultView
-              view="cues"
-              result={result}
-              jobId={id}
-              audioUrl={jobAudioUrl(id)}
-              coverUrl={null}
-            />
-            <Button
-              component={Link}
-              to={`/jobs/${id}/render`}
-              variant="contained"
-              fullWidth
-              sx={{ mt: 2 }}
-            >
-              下一步：渲染
-            </Button>
-          </>
+        </Centered>
+      )
+    }
+    if (!job) return <Centered><CircularProgress /></Centered>
+    if (ACTIVE_STATUSES.includes(job.status)) {
+      return (
+        <Centered>
+          <Typography variant="h6">{STAGE_LABEL[job.stage ?? 'queued']}</Typography>
+          <Typography color="text.secondary">对齐需要几秒到几分钟，页面会自动更新。</Typography>
+          <LinearProgress value={job.progress * 100} variant="determinate" />
+        </Centered>
+      )
+    }
+    if (job.status === 'done') {
+      if (failed && !ready) {
+        return (
+          <Centered>
+            <Alert severity="error">结果加载失败，请刷新重试。</Alert>
+            <Button onClick={reloadResult}>重新加载</Button>
+          </Centered>
         )
-      ) : (
-        <Stack spacing={2} sx={{ py: 4, alignItems: 'center' }}>
-          <Alert severity="error" sx={{ width: '100%' }}>
-            {job.error ?? STAGE_LABEL[job.status]}
-          </Alert>
-          <Button variant="contained" onClick={() => void onRetry()} sx={{ minWidth: 160 }}>
-            重新对齐
+      }
+      if (!ready || !result) return <Centered><CircularProgress /></Centered>
+      return (
+        <>
+          <ResultView
+            view="cues"
+            result={result}
+            jobId={id}
+            audioUrl={jobAudioUrl(id)}
+            coverUrl={null}
+          />
+          <Button component={Link} to={`/jobs/${id}/render`} variant="contained" sx={{ mt: 2 }}>
+            下一步：渲染
           </Button>
-          {retryError && (
-            <Typography color="primary.dark" sx={{ fontSize: 13 }}>
-              {retryError}
-            </Typography>
-          )}
-          <Button component={Link} to="/">
-            返回任务列表
-          </Button>
-        </Stack>
-      )}
+        </>
+      )
+    }
+    return (
+      <Centered>
+        <Alert severity="error">{job.error ?? STAGE_LABEL[job.status]}</Alert>
+        <Button variant="contained" onClick={() => void onRetry()}>
+          重新对齐
+        </Button>
+        {retryError && <Alert severity="error">{retryError}</Alert>}
+        <Button component={Link} to="/">
+          返回任务列表
+        </Button>
+      </Centered>
+    )
+  }
+
+  return (
+    <Card aria-live="polite">
+      <CardContent>{body()}</CardContent>
     </Card>
   )
 }

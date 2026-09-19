@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router'
-import Box from '@mui/material/Box'
+import Alert from '@mui/material/Alert'
 import Card from '@mui/material/Card'
+import CardContent from '@mui/material/CardContent'
+import CardHeader from '@mui/material/CardHeader'
 import Chip from '@mui/material/Chip'
 import IconButton from '@mui/material/IconButton'
-import LinearProgress from '@mui/material/LinearProgress'
 import List from '@mui/material/List'
 import ListItem from '@mui/material/ListItem'
 import ListItemButton from '@mui/material/ListItemButton'
@@ -17,11 +18,11 @@ import { STAGE_LABEL, fmtTime } from '../format'
 import { useJobs } from '../jobs-context'
 import { ACTIVE_STATUSES, type JobMeta, type JobStatus } from '../types'
 
-const STATUS_COLOR: Record<JobStatus, 'default' | 'primary' | 'success' | 'warning'> = {
+const STATUS_COLOR: Record<JobStatus, 'default' | 'primary' | 'success' | 'warning' | 'error'> = {
   queued: 'warning',
   running: 'primary',
   done: 'success',
-  failed: 'primary',
+  failed: 'error',
   cancelled: 'default',
 }
 
@@ -45,56 +46,24 @@ function JobRow({
       : (job.error ?? STAGE_LABEL[job.status])
 
   return (
-    <ListItem disablePadding sx={{ mb: 0.5 }}>
-      <ListItemButton onClick={onOpen} sx={{ gap: 1, alignItems: 'flex-start' }}>
-        <Chip
-          size="small"
-          variant="outlined"
-          color={STATUS_COLOR[job.status]}
-          label={job.status}
-          sx={{ mt: 0.25, flexShrink: 0 }}
-        />
-        <Box sx={{ minWidth: 0, flexGrow: 1 }}>
-          <ListItemText
-            primary={job.name}
-            secondary={secondary}
-            slotProps={{
-              primary: { noWrap: true, sx: { fontSize: 14 } },
-              secondary: { noWrap: true, sx: { fontSize: 12 }, title: secondary ?? undefined },
-            }}
-          />
-          {active && (
-            <LinearProgress
-              variant="determinate"
-              value={Math.max(2, job.progress * 100)}
-              sx={{ mt: 0.5 }}
-            />
-          )}
-        </Box>
-        <Stack direction="row" sx={{ flexShrink: 0, alignItems: 'center' }}>
+    <ListItem
+      disablePadding
+      secondaryAction={
+        <Stack direction="row">
           {(job.status === 'failed' || job.status === 'cancelled') && (
-            <IconButton
-              aria-label="重新对齐"
-              size="small"
-              onClick={(e) => {
-                e.stopPropagation()
-                onRetry()
-              }}
-            >
-              <RefreshIcon fontSize="small" />
+            <IconButton aria-label="重新对齐" onClick={onRetry}>
+              <RefreshIcon />
             </IconButton>
           )}
-          <IconButton
-            aria-label="删除任务"
-            size="small"
-            onClick={(e) => {
-              e.stopPropagation()
-              onDelete()
-            }}
-          >
-            <DeleteOutlinedIcon fontSize="small" />
+          <IconButton aria-label="删除任务" onClick={onDelete}>
+            <DeleteOutlinedIcon />
           </IconButton>
         </Stack>
+      }
+    >
+      <ListItemButton onClick={onOpen}>
+        <Chip color={STATUS_COLOR[job.status]} label={job.status} sx={{ mr: 1 }} />
+        <ListItemText primary={job.name} secondary={secondary} />
       </ListItemButton>
     </ListItem>
   )
@@ -119,34 +88,25 @@ export default function DashboardPage() {
 
   return (
     <Card>
-      <Stack direction="row" spacing={1} sx={{ px: 2, pt: 2, pb: 1, alignItems: 'baseline' }}>
-        <Typography variant="h2" sx={{ flexGrow: 1 }}>
-          任务
-        </Typography>
-        <Chip size="small" variant="outlined" label={jobs.length} />
-      </Stack>
-      {actionError && (
-        <Typography color="primary.dark" sx={{ px: 2, fontSize: 13 }}>
-          {actionError}
-        </Typography>
-      )}
-      {jobs.length === 0 ? (
-        <Typography sx={{ px: 2, pb: 2, color: 'text.secondary', fontSize: 13 }}>
-          还没有任务。切到「新建」，提交音频与文本开始第一次对齐。
-        </Typography>
-      ) : (
-        <List dense sx={{ px: 1, pb: 1 }}>
-          {jobs.map((job) => (
-            <JobRow
-              key={job.id}
-              job={job}
-              onOpen={() => openJob(job.id)}
-              onRetry={() => void onRetry(job.id)}
-              onDelete={() => void onDelete(job.id)}
-            />
-          ))}
-        </List>
-      )}
+      <CardHeader title="任务" subheader={`共 ${jobs.length} 个`} />
+      {actionError && <Alert severity="error">{actionError}</Alert>}
+      <CardContent>
+        {jobs.length === 0 ? (
+          <Typography>还没有任务。切到「新建」开始第一次对齐。</Typography>
+        ) : (
+          <List>
+            {jobs.map((job) => (
+              <JobRow
+                key={job.id}
+                job={job}
+                onOpen={() => openJob(job.id)}
+                onRetry={() => void onRetry(job.id)}
+                onDelete={() => void onDelete(job.id)}
+              />
+            ))}
+          </List>
+        )}
+      </CardContent>
     </Card>
   )
 }

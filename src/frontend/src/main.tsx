@@ -3,11 +3,9 @@ import { createRoot } from 'react-dom/client'
 import { createBrowserRouter } from 'react-router'
 import { RouterProvider } from 'react-router/dom'
 import CssBaseline from '@mui/material/CssBaseline'
-import { ThemeProvider } from '@mui/material/styles'
 import App from './App.tsx'
 import { JobsProvider } from './JobsProvider'
 import { RequireAuth } from './components/RequireAuth'
-import { theme } from './theme'
 import AlignPage from './pages/AlignPage'
 import CreateJobPage from './pages/CreateJobPage'
 import DashboardPage from './pages/DashboardPage'
@@ -35,11 +33,9 @@ const router = createBrowserRouter([
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <ThemeProvider theme={theme}>
-      <CssBaseline />
-      <JobsProvider>
-        <RouterProvider router={router} />
-      </JobsProvider>
-    </ThemeProvider>
+    <CssBaseline />
+    <JobsProvider>
+      <RouterProvider router={router} />
+    </JobsProvider>
   </StrictMode>,
 )

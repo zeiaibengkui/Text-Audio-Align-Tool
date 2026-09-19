@@ -15,7 +15,7 @@ src/
 ├── jobs/                     # Per-job server artifacts (gitignored); sample/ seeded on first start
 └── frontend/                 # React 19 + Vite + TS + MUI, mobile-first app-style UI
     ├── src/                  # routes: / /create /jobs/:id /jobs/:id/render — pages/ + components/,
-    │                         #   theme.ts (all design tokens), steps.ts (bottom nav / top tabs),
+    │                         #   steps.ts (bottom nav / top tabs),
     │                         #   scroll.ts (canvas engine shared with export), api.ts, JobsProvider
     └── scripts/export-scroll.mjs   # Headless MP4 export (@napi-rs/canvas + ffmpeg rawpipe)
 ```

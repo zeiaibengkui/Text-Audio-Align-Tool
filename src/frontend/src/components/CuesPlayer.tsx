@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Box from '@mui/material/Box'
+import Divider from '@mui/material/Divider'
+import List from '@mui/material/List'
 import ListItemButton from '@mui/material/ListItemButton'
+import ListItemText from '@mui/material/ListItemText'
 import Stack from '@mui/material/Stack'
 import Typography from '@mui/material/Typography'
 import { fmtTime } from '../format'
-import { MONO } from '../theme'
 import type { JobResult } from '../types'
 
 export function CuesPlayer({
@@ -52,93 +54,31 @@ export function CuesPlayer({
       ?.scrollIntoView({ block: 'nearest', behavior: smooth ? 'smooth' : 'auto' })
   }, [activeIdx])
 
-  const pct =
-    result.duration > 0 ? Math.min(100, (pos / result.duration) * 100) : 0
+  const pct = result.duration > 0 ? Math.min(100, (pos / result.duration) * 100) : 0
 
   return (
     <Stack spacing={1}>
-      <Box
-        component="audio"
-        ref={audioRef}
-        controls
-        preload="metadata"
-        src={audioUrl}
-        onTimeUpdate={(e: React.SyntheticEvent<HTMLAudioElement>) =>
-          setPos(e.currentTarget.currentTime)
-        }
-        sx={{ width: '100%' }}
-      />
-      <Typography
-        sx={{ fontFamily: MONO, fontSize: 12, color: 'primary.dark', letterSpacing: '0.05em' }}
-      >
+      <Box component="audio" ref={audioRef} controls preload="metadata" src={audioUrl} />
+      <Typography variant="body2" color="text.secondary">
         {fmtTime(pos, 1)}
       </Typography>
-      <Box
-        sx={{
-          position: 'relative',
-          overflowY: 'auto',
-          maxHeight: { xs: '52vh', md: '56vh' },
-          py: 0.5,
-        }}
-      >
-        <Box
-          aria-hidden
-          sx={{
-            position: 'absolute',
-            left: 0,
-            right: 0,
-            top: `${pct}%`,
-            borderTop: '1px solid',
-            borderColor: 'primary.main',
-            opacity: 0.45,
-            pointerEvents: 'none',
-            zIndex: 1,
-          }}
-        >
-          <Box
-            sx={{
-              position: 'absolute',
-              top: -4,
-              left: 8,
-              width: 7,
-              height: 7,
-              borderRadius: '50%',
-              bgcolor: 'primary.main',
-            }}
-          />
+      {/* 播放头要压在列表上，只能用绝对定位 */}
+      <Box sx={{ position: 'relative', overflowY: 'auto', maxHeight: '60vh' }}>
+        <Box aria-hidden sx={{ position: 'absolute', left: 0, right: 0, top: `${pct}%` }}>
+          <Divider />
         </Box>
-        {result.cues.map((c, i) => (
-          <ListItemButton
-            key={i}
-            id={`cue-${i}`}
-            onClick={() => seekTo(c.start)}
-            selected={i === activeIdx}
-            sx={{
-              gap: 1.5,
-              alignItems: 'baseline',
-              borderLeft: '3px solid',
-              borderColor: i === activeIdx ? 'primary.main' : 'transparent',
-              borderRadius: 1,
-            }}
-          >
-            <Typography
-              component="span"
-              sx={{
-                fontFamily: MONO,
-                fontSize: 11,
-                letterSpacing: '0.04em',
-                minWidth: 48,
-                flexShrink: 0,
-                color: i === activeIdx ? 'primary.dark' : 'text.disabled',
-              }}
+        <List dense>
+          {result.cues.map((c, i) => (
+            <ListItemButton
+              key={i}
+              id={`cue-${i}`}
+              selected={i === activeIdx}
+              onClick={() => seekTo(c.start)}
             >
-              {fmtTime(c.start)}
-            </Typography>
-            <Typography component="span" sx={{ fontSize: 14 }}>
-              {c.text}
-            </Typography>
-          </ListItemButton>
-        ))}
+              <ListItemText primary={c.text} secondary={fmtTime(c.start)} />
+            </ListItemButton>
+          ))}
+        </List>
       </Box>
     </Stack>
   )

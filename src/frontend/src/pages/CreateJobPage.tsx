@@ -1,8 +1,10 @@
-import { useState, type FormEvent } from 'react'
+import { useState, type ChangeEvent, type FormEvent, type ReactNode } from 'react'
 import { useNavigate } from 'react-router'
-import Box from '@mui/material/Box'
+import Alert from '@mui/material/Alert'
 import Button from '@mui/material/Button'
 import Card from '@mui/material/Card'
+import CardHeader from '@mui/material/CardHeader'
+import FormHelperText from '@mui/material/FormHelperText'
 import Stack from '@mui/material/Stack'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
@@ -13,7 +15,7 @@ import { useJobs } from '../jobs-context'
 const AUDIO_ACCEPT = 'audio/*,.mp3,.wav,.m4a,.ogg,.flac,.opus,.aac'
 const IMAGE_ACCEPT = 'image/*,.jpg,.jpeg,.png,.webp'
 
-/** 文件选择：按钮 + 下面一行文件名，手机上好点得多。 */
+/** 文件选择：MUI 的 Button-as-label 写法，选中的文件名进 helper text。 */
 function FileField({
   label,
   accept,
@@ -26,29 +28,24 @@ function FileField({
   accept: string
   file: File | null
   hint: string
-  icon: React.ReactNode
+  icon: ReactNode
   onPick: (f: File | null) => void
 }) {
   return (
-    <Stack spacing={0.5}>
-      <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+    <Stack spacing={1}>
+      <Typography variant="body2" color="text.secondary">
         {label}
       </Typography>
-      <Button variant="outlined" component="label" startIcon={icon} size="large">
+      <Button variant="outlined" component="label" startIcon={icon}>
         {file ? '重新选择' : '选择文件'}
-        <Box
-          component="input"
+        <input
+          hidden
           type="file"
           accept={accept}
-          sx={{ display: 'none' }}
-          onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-            onPick(e.target.files?.[0] ?? null)
-          }
+          onChange={(e: ChangeEvent<HTMLInputElement>) => onPick(e.target.files?.[0] ?? null)}
         />
       </Button>
-      <Typography variant="caption" sx={{ color: file ? 'text.primary' : 'text.disabled' }}>
-        {file?.name ?? hint}
-      </Typography>
+      <FormHelperText>{file?.name ?? hint}</FormHelperText>
     </Stack>
   )
 }
@@ -75,7 +72,7 @@ export default function CreateJobPage() {
       setAudioFile(null)
       setCoverFile(null)
       setText('')
-      navigate(`/jobs/${job.id}`)
+      void navigate(`/jobs/${job.id}`)
     } catch (err) {
       setFormError(err instanceof Error ? err.message : '提交失败')
     } finally {
@@ -85,9 +82,8 @@ export default function CreateJobPage() {
 
   return (
     <Card>
-      <Stack component="form" spacing={2.5} sx={{ p: 2 }} onSubmit={onSubmit}>
-        <Typography variant="h2">新建任务</Typography>
-
+      <CardHeader title="新建任务" />
+      <Stack component="form" spacing={2} onSubmit={onSubmit} sx={{ px: 2, pb: 2 }}>
         <FileField
           label="音频文件"
           accept={AUDIO_ACCEPT}
@@ -102,10 +98,8 @@ export default function CreateJobPage() {
           placeholder="粘贴或输入要对齐的中文文本"
           multiline
           minRows={8}
-          fullWidth
           value={text}
           onChange={(e) => setText(e.target.value)}
-          slotProps={{ inputLabel: { shrink: true } }}
         />
 
         <FileField
@@ -117,14 +111,10 @@ export default function CreateJobPage() {
           onPick={setCoverFile}
         />
 
-        <Button type="submit" variant="contained" size="large" disabled={submitting}>
+        <Button type="submit" variant="contained" disabled={submitting}>
           {submitting ? '正在提交…' : '开始对齐'}
         </Button>
-        {formError && (
-          <Typography color="primary.dark" sx={{ fontSize: 13 }}>
-            {formError}
-          </Typography>
-        )}
+        {formError && <Alert severity="error">{formError}</Alert>}
       </Stack>
     </Card>
   )

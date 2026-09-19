@@ -151,83 +151,60 @@ export function ScrollPlayer({
       <Box
         component="canvas"
         ref={canvasRef}
-        sx={{ width: '100%', aspectRatio: '16 / 9', display: 'block', borderRadius: 2, bgcolor: '#3b342a' }}
+        // canvas 要按容器撑满并保持 16:9，没有对应的 prop
+        sx={{ width: '100%', aspectRatio: '16 / 9', display: 'block', bgcolor: '#3b342a' }}
       />
-      <Box
-        component="audio"
-        ref={audioRef}
-        controls
-        preload="metadata"
-        src={audioUrl}
-        sx={{ width: '100%' }}
-      />
-      <Typography variant="body2" sx={{ color: 'text.disabled', fontSize: 12 }}>
+      <Box component="audio" ref={audioRef} controls preload="metadata" src={audioUrl} />
+      <Typography variant="body2" color="text.secondary">
         文字随朗读声逐字入墨，卷轴缓缓铺展。可拖动进度条回看。
       </Typography>
 
-      <Stack spacing={1}>
-        {exportState === null && (
-          <Button
-            variant="contained"
-            onClick={() => void onExport()}
-            disabled={exportError !== null}
-            sx={{ alignSelf: 'flex-start' }}
-          >
-            导出视频
+      {(exportState === null || exportState.status === 'none') && (
+        <Button variant="contained" onClick={() => void onExport()}>
+          导出视频
+        </Button>
+      )}
+      {exporting && (
+        <>
+          <Button variant="contained" disabled>
+            {exportState?.status === 'queued' ? '排队中' : `导出中 ${progress}%`}
           </Button>
-        )}
-        {exportState?.status === 'none' && (
-          <Button
-            variant="contained"
-            onClick={() => void onExport()}
-            sx={{ alignSelf: 'flex-start' }}
-          >
-            导出视频
+          {exportState?.status === 'rendering' && (
+            <LinearProgress
+              variant={progress > 0 ? 'determinate' : 'indeterminate'}
+              value={progress}
+            />
+          )}
+        </>
+      )}
+      {exportState?.status === 'done' && (
+        <>
+          <Button variant="contained" href={exportVideoUrl(jobId)} download>
+            下载视频
           </Button>
-        )}
-        {exporting && (
-          <Box sx={{ maxWidth: 360 }}>
-            <Button variant="contained" disabled fullWidth>
-              {exportState?.status === 'queued' ? '排队中' : `导出中 ${progress}%`}
+          <Button variant="outlined" onClick={() => void onExport(true)}>
+            重新导出
+          </Button>
+          {exportState.elapsed_sec != null && (
+            <Typography variant="body2" color="text.secondary">
+              耗时 {fmtElapsed(exportState.elapsed_sec)}
+            </Typography>
+          )}
+        </>
+      )}
+      {exportState?.status === 'failed' && (
+        <Alert
+          severity="error"
+          action={
+            <Button color="inherit" size="small" onClick={() => void onExport()}>
+              重试
             </Button>
-            {exportState?.status === 'rendering' && (
-              <LinearProgress
-                variant={progress > 0 ? 'determinate' : 'indeterminate'}
-                value={progress}
-                sx={{ mt: 1 }}
-              />
-            )}
-          </Box>
-        )}
-        {exportState?.status === 'done' && (
-          <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
-            <Button variant="contained" href={exportVideoUrl(jobId)} download>
-              下载视频
-            </Button>
-            <Button variant="outlined" onClick={() => void onExport(true)}>
-              重新导出
-            </Button>
-            {exportState.elapsed_sec != null && (
-              <Typography variant="body2" sx={{ color: 'text.disabled', fontSize: 12 }}>
-                耗时 {fmtElapsed(exportState.elapsed_sec)}
-              </Typography>
-            )}
-          </Stack>
-        )}
-        {exportState?.status === 'failed' && (
-          <Alert
-            severity="error"
-            action={
-              <Button color="inherit" size="small" onClick={() => void onExport()}>
-                重试
-              </Button>
-            }
-          >
-            导出失败：{exportState.error}
-          </Alert>
-        )}
-        {exportError && <Alert severity="error">{exportError}</Alert>}
-      </Stack>
+          }
+        >
+          导出失败：{exportState.error}
+        </Alert>
+      )}
+      {exportError && <Alert severity="error">{exportError}</Alert>}
     </Stack>
   )
 }

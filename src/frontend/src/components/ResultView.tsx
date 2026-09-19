@@ -1,9 +1,7 @@
-import Box from '@mui/material/Box'
 import Divider from '@mui/material/Divider'
 import Typography from '@mui/material/Typography'
 import { ScrollPlayer } from '../ScrollPlayer'
 import { fmtTime } from '../format'
-import { DISPLAY } from '../theme'
 import type { JobResult } from '../types'
 import { CuesPlayer } from './CuesPlayer'
 
@@ -26,25 +24,13 @@ export function ResultView({
 }) {
   return (
     <>
-      <Box sx={{ pb: 1.5 }}>
-        <Typography
-          sx={{
-            fontFamily: DISPLAY,
-            fontSize: 18,
-            letterSpacing: '0.08em',
-            mb: 0.5,
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          {result.text.slice(0, 24)}…
-        </Typography>
-        <Typography variant="body2" sx={{ color: 'text.secondary', fontSize: 12 }}>
-          时长 {fmtTime(result.duration)} · {result.words.length} 词 · {result.cues.length} 条字幕
-        </Typography>
-      </Box>
-      <Divider sx={{ mb: 2 }} />
+      <Typography variant="subtitle1" noWrap>
+        {result.text.slice(0, 24)}…
+      </Typography>
+      <Typography variant="body2" color="text.secondary">
+        时长 {fmtTime(result.duration)} · {result.words.length} 词 · {result.cues.length} 条字幕
+      </Typography>
+      <Divider sx={{ my: 2 }} />
       {view === 'scroll' ? (
         <ScrollPlayer
           key={jobId}
