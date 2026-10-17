@@ -26,6 +26,10 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 CJK SC，缺字体导出的视频会是方框。`ffmpeg` 同时被 `align_core.audio_duration()` 的 `ffprobe`
 和导出流程使用。
 
+导出默认会先探测 VAAPI（Intel/AMD 核显的 `h264_vaapi`）。云主机没有 `/dev/dri`，探测失败后
+自动回退 `libx264`，不需要任何配置；如果服务器有核显又想用硬件编码，把运行用户加进 `render`
+组（`sudo usermod -aG render taa`）并重启服务即可。
+
 ## 2. Python 环境（CPU 版 torch）
 
 ```bash

@@ -10,9 +10,16 @@
  *       --audio <audio|http://...> --out scroll.mp4 \
  *       [--fps 25] [--size 1280x720] [--rows 12] [--dur 12] [--no-audio]
  *       [--cover cover.jpg] [--segs 8]
+ *       [--hwaccel auto|vaapi|none] [--vaapi-device /dev/dri/renderD128]
+ *       [--qp 22] [--crf 22]
  *
  * --segs 是分段数上限（默认 8，实际取 min(8, CPU 核数, 每段≥1200 帧)）；
  * 进度以 \rNN% 输出在 stdout，服务端按 \r(\d+)% 解析，契约不变。
+ *
+ * 编码默认 --hwaccel auto：先用 2 帧黑图探一下 VAAPI（Intel iGPU 的
+ * h264_vaapi），能用就走硬件编码，不能用（没有 /dev/dri 的云主机）就静默
+ * 回退 libx264。注意这里用不上 -hwaccel 参数——那是解码选项，而我们的输入
+ * 已经是画布渲染好的 rawvideo；要的是编码器 h264_vaapi + hwupload。
  *
  * 封面：第 20s（不足时长则取末帧）的画面作为片头 1s 定格，mp4 由此自带
  * 封面（第一帧）；音频延迟 1s 衔接，总时长 = 音频 + 1s。
@@ -47,6 +54,53 @@ const durOverride = Number(arg('dur', 0))
 const coverPath = arg('cover')
 const segsCap = Number(arg('segs', 8))
 let noAudio = args.includes('--no-audio')
+const hwaccelArg = arg('hwaccel', 'auto')
+const vaapiDevice = arg('vaapi-device', '/dev/dri/renderD128')
+const qp = Number(arg('qp', 22))
+const crf = Number(arg('crf', 22))
+if (!['auto', 'vaapi', 'none'].includes(hwaccelArg)) {
+  console.error(`--hwaccel 只能是 auto / vaapi / none（收到 ${hwaccelArg}）`)
+  process.exit(1)
+}
+
+/**
+ * 探一下这台机器能不能用 VAAPI 编码：真编码 2 帧黑图，比检查 /dev/dri
+ * 可靠（设备存在但驱动/编码器不可用的情况很常见）。判定开销 ~100ms。
+ */
+function vaapiWorks(device) {
+  try {
+    execFileSync(
+      'ffmpeg',
+      [
+        '-hide_banner', '-loglevel', 'error', '-y',
+        '-vaapi_device', device,
+        '-f', 'lavfi', '-i', 'color=c=black:size=64x64:rate=1:duration=0.08',
+        '-vf', 'format=nv12,hwupload',
+        '-c:v', 'h264_vaapi', '-rc_mode', 'CQP', '-qp', String(qp),
+        '-f', 'null', '-',
+      ],
+      { stdio: 'ignore', timeout: 5000 }, // 卡住的驱动不该拖住整个导出
+    )
+    return true
+  } catch {
+    return false
+  }
+}
+
+// 编排进程解析 auto → 具体值，再原样传给段子进程（避免 8 个段各探一次）
+const hwaccel =
+  hwaccelArg === 'auto' ? (vaapiWorks(vaapiDevice) ? 'vaapi' : 'none') : hwaccelArg
+
+/** 视频编码参数：VAAPI 走 hwupload 上显存，否则 libx264。 */
+function videoCodecArgs() {
+  if (hwaccel === 'vaapi') {
+    return [
+      '-vf', 'format=nv12,hwupload',
+      '-c:v', 'h264_vaapi', '-rc_mode', 'CQP', '-qp', String(qp),
+    ]
+  }
+  return ['-c:v', 'libx264', '-crf', String(crf), '-preset', 'slow', '-pix_fmt', 'yuv420p']
+}
 
 // 子进程段模式：--range 起点,终点（左闭右开），--seg 段序号（决定输出文件名）
 const rangeArg = arg('range')
@@ -126,11 +180,11 @@ async function renderRange() {
     'ffmpeg',
     [
       '-y',
+      ...(hwaccel === 'vaapi' ? ['-vaapi_device', vaapiDevice] : []),
       '-f', 'rawvideo', '-pix_fmt', 'rgba', '-s', `${width}x${height}`,
       '-r', String(fps),
       '-i', '-',
-      '-c:v', 'libx264', '-crf', '22', '-preset', 'slow',
-      '-pix_fmt', 'yuv420p',
+      ...videoCodecArgs(),
       '-an', segFile,
     ],
     { stdio: ['pipe', 'inherit', 'inherit'], stdout: 'inherit' },
@@ -161,7 +215,8 @@ async function renderRange() {
 
 if (isWorker) {
   process.stderr.write(
-    `段 ${segIndex} 渲染 ${rangeB - rangeA} 帧 [${rangeA},${rangeB}) @ ${fps}fps · ${width}x${height}\n`,
+    `段 ${segIndex} 渲染 ${rangeB - rangeA} 帧 [${rangeA},${rangeB}) @ ${fps}fps · ` +
+      `${width}x${height} · ${hwaccel === 'vaapi' ? 'VAAPI' : 'x264'}\n`,
   )
   await renderRange()
   process.exit(0)
@@ -169,7 +224,8 @@ if (isWorker) {
 
 // ---------- 编排：切段 → 并发渲染 → concat+混音 ----------
 console.log(
-  `渲染 ${frames} 帧 · ${duration}s @ ${fps}fps · ${width}x${height} · 列高 ${rows}`,
+  `渲染 ${frames} 帧 · ${duration}s @ ${fps}fps · ${width}x${height} · 列高 ${rows} · ` +
+    (hwaccel === 'vaapi' ? `VAAPI ${vaapiDevice} (qp ${qp})` : `libx264 (crf ${crf})`),
 )
 
 const cpus = os.availableParallelism ? os.availableParallelism() : os.cpus().length
@@ -200,6 +256,9 @@ for (let i = 0; i < segs; i++) {
     '--fps', String(fps), '--size', `${width}x${height}`,
     '--rows', String(rows), '--dur', String(durOverride),
     '--segs', String(segsCap),
+    // 编码器由编排进程定好，段子进程直接用，不再各自探测
+    '--hwaccel', hwaccel, '--vaapi-device', vaapiDevice,
+    '--qp', String(qp), '--crf', String(crf),
     '--range', `${a},${b}`, '--seg', String(i),
   ]
   if (coverPath) workerArgs.push('--cover', coverPath)
@@ -256,9 +315,11 @@ if (duration > 0.2) {
   const pp = spawn(
     'ffmpeg',
     [
-      '-y', '-loop', '1', '-framerate', String(fps), '-t', '1',
+      '-y',
+      ...(hwaccel === 'vaapi' ? ['-vaapi_device', vaapiDevice] : []),
+      '-loop', '1', '-framerate', String(fps), '-t', '1',
       '-i', pngPath,
-      '-c:v', 'libx264', '-crf', '22', '-preset', 'slow', '-pix_fmt', 'yuv420p',
+      ...videoCodecArgs(),
       '-an', mp4Path,
     ],
     { stdio: 'inherit' },
